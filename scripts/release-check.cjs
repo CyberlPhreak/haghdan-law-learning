@@ -23,6 +23,9 @@ const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 const soundSource = fs.readFileSync('src/sound.tsx', 'utf8');
 if (packageJson.dependencies?.['expo-audio'] === '1.1.1' && soundSource.includes('SoundProvider') && storeSource.includes('soundEffectsEnabled')) pass('Optional local sound feedback configured');
 else fail('Sound feedback configuration is missing');
+const quizAnswerLayouts = navigationSource.match(/style=\{s\.quizAnswers\}/g) || [];
+if (quizAnswerLayouts.length === 2 && navigationSource.includes("quizAnswers: { width: '100%', alignSelf: 'stretch'")) pass('Native quiz answers stretch to the mobile card width');
+else fail('Mobile quiz-answer width guard is missing');
 
 ['assets/icon.png','assets/adaptive-icon.png','assets/splash-icon.png','assets/favicon.png','assets/sounds/tap.wav','assets/sounds/correct-clap.wav','assets/sounds/incorrect.wav','docs/PRIVACY_POLICY.md','docs/TERMS_AND_DISCLAIMER.md','docs/EDITORIAL_POLICY.md','eas.json','PUBLISHING.md'].forEach(path => requireFile(path, path.endsWith('.png') || path.endsWith('.wav') ? 1000 : 100));
 

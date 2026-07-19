@@ -302,7 +302,7 @@ function LessonSection({ item, index }: { item: Lesson; index: number }) {
 
 function QuizCard({ question, selected, revealed, onSelect }: { question: QuizQuestion; selected: number | null; revealed: boolean; onSelect: (value: number) => void }) {
   const isCorrect = selected === question.correctIndex;
-  return <View style={s.reading}><View style={s.iconHero}><Feather name="help-circle" size={25} color={palette.primary} /></View><Text style={s.eyebrow}>سنجش یادگیری</Text><Text style={s.quizTitle}>{question.prompt}</Text><View style={s.list}>{question.answers.map((answer, index) => {
+  return <View style={s.reading}><View style={s.iconHero}><Feather name="help-circle" size={25} color={palette.primary} /></View><Text style={s.eyebrow}>سنجش یادگیری</Text><Text style={s.quizTitle}>{question.prompt}</Text><View style={s.quizAnswers}>{question.answers.map((answer, index) => {
     const chosen = selected === index;
     const good = revealed && index === question.correctIndex;
     const bad = revealed && chosen && !good;
@@ -371,7 +371,7 @@ function TestScreen({ route, navigation }: TestProps) {
     <ScrollView contentContainerStyle={s.testPage}>
       <View style={s.questionMeta}><Text style={s.hint}>{pathwayById[question.subjectId]?.title}</Text><Pressable accessibilityRole="button" accessibilityState={{selected:flagged.includes(question.id)}} onPress={toggleFlag} style={({pressed})=>[s.flagButton,flagged.includes(question.id)&&s.flagActive,pressed&&s.pressed]}><Feather name="flag" size={17} color={flagged.includes(question.id)?palette.saffron:palette.muted} /><Text style={s.hint}>{flagged.includes(question.id)?'علامت‌گذاری شد':'علامت‌گذاری'}</Text></Pressable></View>
       <Text style={s.quizTitle}>{question.prompt}</Text>
-      <View style={s.list}>{question.answers.map((answer,answerIndex)=>{const chosen=answers[question.id]===answerIndex;return <Pressable key={answerIndex} accessibilityRole="radio" accessibilityState={{checked:chosen}} onPress={()=>setAnswers((items)=>({...items,[question.id]:answerIndex}))} style={({pressed})=>[s.answer,chosen&&s.answerChosen,pressed&&s.pressed]}><View style={[s.radio,chosen&&s.radioChosen]}>{chosen?<Feather name="check" size={13} color={palette.white}/>:null}</View><Text style={s.answerText}>{answer}</Text></Pressable>})}</View>
+      <View style={s.quizAnswers}>{question.answers.map((answer,answerIndex)=>{const chosen=answers[question.id]===answerIndex;return <Pressable key={answerIndex} accessibilityRole="radio" accessibilityState={{checked:chosen}} onPress={()=>setAnswers((items)=>({...items,[question.id]:answerIndex}))} style={({pressed})=>[s.answer,chosen&&s.answerChosen,pressed&&s.pressed]}><View style={[s.radio,chosen&&s.radioChosen]}>{chosen?<Feather name="check" size={13} color={palette.white}/>:null}</View><Text style={s.answerText}>{answer}</Text></Pressable>})}</View>
       <View style={s.questionNav}><ActionButton label="قبلی" icon="arrow-right" variant="quiet" onPress={()=>setIndex(Math.max(0,index-1))} disabled={index===0} /><ActionButton label={index===questions.length-1?'ثبت آزمون':'بعدی'} icon="arrow-left" onPress={()=>index===questions.length-1?submit():setIndex(index+1)} /></View>
       <Text style={s.centerBody}>{answered} پاسخ داده شده · {flagged.length} علامت‌گذاری شده</Text>
     </ScrollView>
@@ -613,6 +613,7 @@ const createStyles = (palette: AppPalette) => {
   term: { width: '100%', padding: 17, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.background, alignItems: 'flex-end' },
   termFa: { color: palette.ink, fontSize: 20, fontWeight: '900', writingDirection: 'rtl', marginTop: 4 },
   quizTitle: { color: palette.ink, fontSize: 23, lineHeight: 35, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
+  quizAnswers: { width: '100%', alignSelf: 'stretch', gap: 11 },
   answer: { minHeight: 59, flexDirection: 'row-reverse', alignItems: 'center', gap: 11, padding: 13, borderWidth: 1, borderColor: palette.line, borderRadius: radius.md, backgroundColor: palette.background },
   answerChosen: { borderColor: palette.primary, backgroundColor: palette.primarySoft },
   answerGood: { borderColor: palette.success, backgroundColor: palette.tealSoft },

@@ -7,7 +7,7 @@
     "start": "node scripts/run-expo.cjs start --go --port 8084",
     "android": "node scripts/run-expo.cjs start --android --port 8084",
     "ios": "node scripts/run-expo.cjs start --ios --port 8084",
-    "web": "node scripts/run-expo.cjs start --web --port 8084",
+    "web": "node scripts/run-expo.cjs start --web --port 8084 --max-workers 1",
     "export:web": "node node_modules/expo/bin/cli export --platform web --max-workers 1",
     "typecheck": "tsc --noEmit"
   },

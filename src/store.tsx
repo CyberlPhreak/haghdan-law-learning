@@ -11,6 +11,8 @@ export type ReviewRecord = {
 
 export type TestAttempt = { id: string; stage: 'FLK1' | 'FLK2'; mode: 'quick' | 'diagnostic' | 'mock'; score: number; correct: number; total: number; completedAt: string; durationSeconds: number };
 
+export type ThemeMode = 'system' | 'light' | 'dark';
+
 export type LearnerState = {
   hydrated: boolean;
   onboarded: boolean;
@@ -24,10 +26,11 @@ export type LearnerState = {
   activeDays: string[];
   audioEnabled: boolean;
   persianFirst: boolean;
+  themeMode: ThemeMode;
   testHistory: TestAttempt[];
 };
 
-type SettingsPatch = Partial<Pick<LearnerState, 'name' | 'dailyGoal' | 'audioEnabled' | 'persianFirst'>>;
+type SettingsPatch = Partial<Pick<LearnerState, 'name' | 'dailyGoal' | 'audioEnabled' | 'persianFirst' | 'themeMode'>>;
 
 type StoreValue = {
   state: LearnerState;
@@ -57,6 +60,7 @@ const initialState: LearnerState = {
   activeDays: [],
   audioEnabled: false,
   persianFirst: true,
+  themeMode: 'system',
   testHistory: [],
 };
 

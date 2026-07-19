@@ -1,0 +1,30 @@
+{
+  "name": "haghdan-law-learning",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "node scripts/run-expo.cjs start --go --port 8084",
+    "android": "node scripts/run-expo.cjs start --android --port 8084",
+    "ios": "node scripts/run-expo.cjs start --ios --port 8084",
+    "web": "node scripts/run-expo.cjs start --web --port 8084",
+    "export:web": "node node_modules/expo/bin/cli export --platform web --max-workers 1",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@expo-google-fonts/manrope": "0.4.2",
+    "@expo/vector-icons": "15.0.2",
+    "expo": "55.0.28",
+    "expo-font": "55.0.8",
+    "expo-status-bar": "55.0.6",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-native": "0.83.10",
+    "react-native-safe-area-context": "5.6.2",
+    "react-native-web": "0.21.2"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.10",
+    "typescript": "5.9.2"
+  }
+}

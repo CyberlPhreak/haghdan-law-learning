@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "حق‌دان | HaghDān",
+    "slug": "haghdan-law-learning",
+    "version": "0.1.0",
+    "orientation": "default",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#F7F6FC",
+    "primaryColor": "#4B3DB8",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.haghdan.learning"
+    },
+    "android": {
+      "package": "com.haghdan.learning",
+      "adaptiveIcon": {
+        "backgroundColor": "#4B3DB8"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "name": "حق‌دان | آموزش حقوق",
+      "shortName": "حق‌دان",
+      "themeColor": "#4B3DB8",
+      "backgroundColor": "#F7F6FC"
+    }
+  }
+}

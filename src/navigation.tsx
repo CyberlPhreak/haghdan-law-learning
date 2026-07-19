@@ -22,7 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ActionButton, Brand, ProgressBar } from './components';
 import { glossary, lessonById, lessons, pathwayById, pathways, type IconName, type Lesson, type Pathway, type QuizQuestion } from './curriculum';
-import { questionsForStage, stageSubjects, type SqeStage, type SqeTrack } from './sqe';
+import { questionsForStage, sqeTotals, stageSubjects, type SqeStage, type SqeTrack } from './sqe';
 import { useLearner } from './store';
 import { palette, radius, shadow, space, type } from './theme';
 
@@ -30,7 +30,7 @@ export type RootStackParamList = {
   Main: undefined;
   Pathway: { pathwayId: string };
   Lesson: { lessonId: string };
-  Test: { stage: SqeStage; count: number; mode: 'quick' | 'diagnostic' | 'mock' };
+  Test: { stage: SqeStage; count: number; mode: 'quick' | 'diagnostic' | 'mock'; subjectId?: string };
 };
 
 type TabParams = {
@@ -169,7 +169,7 @@ function Learn() {
       <Header eyebrow="برنامه کامل SQE" title="یادگیری ساختاریافته" subtitle="FLK1 و FLK2 برای دانش کاربردی؛ SQE2 برای شش مهارت عملی." />
       <View style={s.specBanner}>
         <View style={s.specIcon}><Feather name="award" size={24} color={palette.white} /></View>
-        <View style={s.flexEnd}><Text style={s.specTitle}>منطبق با ساختار SRA · نسخه ۲۰۲۵/۲۶</Text><Text style={s.specText}>۱۴ بخش SQE1 · ۶ مهارت SQE2 · اخلاق حرفه‌ای در سراسر برنامه</Text></View>
+        <View style={s.flexEnd}><Text style={s.specTitle}>منطبق با ساختار SRA · نسخه ۲۰۲۵/۲۶</Text><Text style={s.specText}>۱۴ بخش SQE1 · ۶ مهارت SQE2 · {sqeTotals.practiceQuestions} پرسش تمرینی · اخلاق حرفه‌ای pervasive</Text></View>
       </View>
       <View style={s.trackTabs}>{tracks.map((item) => <Pressable key={item.key} accessibilityRole="tab" accessibilityState={{ selected: track === item.key }} onPress={() => { setTrack(item.key); setQuery(''); }} style={({ pressed }) => [s.trackTab, track === item.key && s.trackTabActive, pressed && s.pressed]}><Text style={[s.trackTabText, track === item.key && s.trackTabTextActive]}>{item.label}</Text></Pressable>)}</View>
       <View style={s.searchBox}><Feather name="search" size={20} color={palette.muted} /><TextInput value={query} onChangeText={setQuery} placeholder="جست‌وجوی موضوع یا اصطلاح…" placeholderTextColor={palette.muted} style={s.searchInput} textAlign="right" accessibilityLabel="جست‌وجوی سرفصل‌ها" /></View>
@@ -196,6 +196,7 @@ function PathwayScreen({ route, navigation }: PathProps) {
         <Text style={s.pathHeroTitle}>{item.title}</Text><Text style={[s.english, { color: item.color }]}>{item.englishTitle}</Text><Text style={s.body}>{item.description}</Text>
         <View style={s.between}><Text style={s.smallStrong}>{complete} از {item.lessonIds.length} درس</Text><Text style={s.smallStrong}>{percent}٪</Text></View>
         <ProgressBar value={percent} color={item.color} trackColor={palette.white} />
+        {item.track === 'FLK1' || item.track === 'FLK2' ? <ActionButton label={`تمرین ۲۰ سؤال از ${item.title}`} icon="edit-3" variant="secondary" onPress={() => navigation.navigate('Test', { stage: item.track as SqeStage, count: 20, mode: 'diagnostic', subjectId: item.id })} /> : null}
       </View>
       <View style={s.list}>{item.lessonIds.map((id, index) => {
         const lesson = lessonById[id]!;
@@ -269,7 +270,18 @@ function LessonScreen({ route, navigation }: LessonProps) {
 
 function LessonSection({ item, index }: { item: Lesson; index: number }) {
   const part = item.sections[index]!;
-  return <View style={s.reading}><Text style={s.eyebrow}>بخش {index + 1} از {item.sections.length}</Text><Text style={s.readingTitle}>{part.title}</Text><Text style={s.readingBody}>{part.body}</Text>{part.callout ? <View style={s.callout}><Feather name="info" size={20} color={palette.primary} /><Text style={s.calloutText}>{part.callout}</Text></View> : null}<View style={s.term}><Text style={s.hint}>واژه کلیدی</Text><Text style={s.termFa}>{part.termFa}</Text><Text style={s.english}>{part.termEn}</Text></View><Notice /></View>;
+  return <View style={s.reading}>
+    <Text style={s.eyebrow}>بخش {index + 1} از {item.sections.length}</Text>
+    <Text style={s.readingTitle}>{part.title}</Text>
+    <Text style={s.readingBody}>{part.body}</Text>
+    {part.bullets?.length ? <View style={s.learningList}>{part.bullets.map((bullet, bulletIndex) => <View key={bulletIndex} style={s.learningPoint}><View style={s.bulletDot} /><Text style={s.learningText}>{bullet}</Text></View>)}</View> : null}
+    {part.example ? <View style={s.exampleCard}><Feather name="briefcase" size={20} color="#795100" /><View style={s.flexEnd}><Text style={s.exampleLabel}>مثال و تمرین کاربردی</Text><Text style={s.exampleText}>{part.example}</Text></View></View> : null}
+    {part.checklist?.length ? <View style={s.checklistCard}><Text style={s.checklistTitle}>چک‌لیست این بخش</Text>{part.checklist.map((entry, entryIndex) => <View key={entryIndex} style={s.checkRow}><Feather name="check-square" size={18} color={palette.teal} /><Text style={s.checkText}>{entry}</Text></View>)}</View> : null}
+    {part.callout ? <View style={s.callout}><Feather name="info" size={20} color={palette.primary} /><Text style={s.calloutText}>{part.callout}</Text></View> : null}
+    <View style={s.term}><Text style={s.hint}>واژه کلیدی</Text><Text style={s.termFa}>{part.termFa}</Text><Text style={s.english}>{part.termEn}</Text></View>
+    {part.source ? <View style={s.sourceNote}><Feather name="external-link" size={15} color={palette.muted} /><Text style={s.sourceText}>{part.source}</Text></View> : null}
+    <Notice />
+  </View>;
 }
 
 function QuizCard({ question, selected, revealed, onSelect }: { question: QuizQuestion; selected: number | null; revealed: boolean; onSelect: (value: number) => void }) {
@@ -284,10 +296,10 @@ function QuizCard({ question, selected, revealed, onSelect }: { question: QuizQu
 
 type TestProps = NativeStackScreenProps<RootStackParamList, 'Test'>;
 function TestScreen({ route, navigation }: TestProps) {
-  const { stage, count, mode } = route.params;
+  const { stage, count, mode, subjectId } = route.params;
   const { recordTestAttempt } = useLearner();
-  const pool = questionsForStage(stage);
-  const questions = useMemo(() => [...pool].sort(() => Math.random() - 0.5).slice(0, Math.min(count, pool.length)), [stage, count]);
+  const pool = questionsForStage(stage).filter((item) => !subjectId || item.subjectId === subjectId);
+  const questions = useMemo(() => [...pool].sort(() => Math.random() - 0.5).slice(0, Math.min(count, pool.length)), [stage, count, subjectId]);
   const duration = mode === 'mock' ? 153 * 60 : mode === 'diagnostic' ? 45 * 60 : 15 * 60;
   const [remaining, setRemaining] = useState(duration);
   const [index, setIndex] = useState(0);
@@ -380,7 +392,7 @@ function Practice() {
     return scores.length ? Math.max(...scores) + '٪' : '—';
   };
   return <Page>
-    <Header eyebrow="بانک تمرین SQE1" title="تمرین و آزمون" subtitle="پرسش‌های پنج‌گزینه‌ای single best answer با زمان‌سنج، علامت‌گذاری و ذخیره نتیجه." />
+    <Header eyebrow="بانک تمرین SQE1" title="تمرین و آزمون" subtitle={`${sqeTotals.practiceQuestions} پرسش پنج‌گزینه‌ای ساختاریافته با زمان‌سنج، علامت‌گذاری و ذخیره نتیجه.`} />
     <View style={s.examGrid}>{(['FLK1','FLK2'] as SqeStage[]).map((stage) => <View key={stage} style={s.examPanel}><View style={s.between}><View style={[s.pathIcon,{backgroundColor:stage==='FLK1'?palette.primarySoft:palette.tealSoft}]}><Feather name={stage==='FLK1'?'briefcase':'home'} size={23} color={stage==='FLK1'?palette.primary:palette.teal} /></View><View style={s.flexEnd}><Text style={s.examStage}>{stage}</Text><Text style={s.hint}>{stageSubjects(stage).length} بخش · بهترین نتیجه {best(stage)}</Text></View></View><View style={s.list}>{modes.map((item) => <Pressable key={item.mode} accessibilityRole="button" onPress={() => nav.navigate('Test',{stage,count:item.count,mode:item.mode})} style={({pressed})=>[s.modeRow,pressed&&s.pressed]}><View style={s.modeIcon}><Feather name={item.icon} size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.modeTitle}>{item.title}</Text><Text style={s.hint}>{item.subtitle}</Text></View><Feather name="chevron-left" size={20} color={palette.muted} /></Pressable>)}</View></View>)}</View>
     <View style={s.examNote}><Feather name="info" size={20} color={palette.primary} /><View style={s.flexEnd}><Text style={s.smallStrong}>فرمت واقعی SQE1</Text><Text style={s.hint}>هر FLK در آزمون رسمی ۱۸۰ سؤال دارد و در دو نشست ۹۰ سؤالی برگزار می‌شود. شبیه‌ساز این اپ یک نشست ۹۰ سؤالی را تمرین می‌کند.</Text></View></View>
     <SectionTitle title="نتایج اخیر" />
@@ -393,7 +405,7 @@ function Profile() {
   const { state, streak, updateSettings, resetProgress } = useLearner();
   const [name, setName] = useState(state.name);
   const reset = () => Alert.alert('پاک‌کردن پیشرفت؟', 'همه درس‌ها و امتیازهای محلی حذف می‌شوند.', [{ text: 'انصراف', style: 'cancel' }, { text: 'پاک کردن', style: 'destructive', onPress: () => void resetProgress() }]);
-  return <Page><Header eyebrow="حساب محلی" title="تنظیمات یادگیری" subtitle="اطلاعات شما فقط روی همین دستگاه ذخیره می‌شود." /><View style={s.profile}><View style={s.avatar}><Feather name="user" size={30} color={palette.white} /></View><View style={s.flexEnd}><Text style={s.profileName}>{state.name}</Text><Text style={s.profileMeta}>{state.completedLessons.length} درس · {streak} روز پیوسته</Text></View></View><View style={s.settings}><Text style={s.sectionTitle}>مشخصات</Text><Text style={s.label}>نام نمایشی</Text><View style={s.nameRow}><TextInput value={name} onChangeText={setName} style={s.nameInput} textAlign="right" /><Pressable onPress={() => updateSettings({ name: name.trim() || state.name })} style={s.save}><Text style={s.saveText}>ذخیره</Text></Pressable></View><Text style={s.label}>هدف روزانه</Text><GoalPicker value={state.dailyGoal} onChange={(dailyGoal) => updateSettings({ dailyGoal })} /></View><View style={s.settings}><Text style={s.sectionTitle}>ترجیحات</Text><View style={s.settingRow}><View style={s.iconSmall}><Feather name="align-right" size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>فارسی در اولویت</Text><Text style={s.hint}>اصطلاح انگلیسی زیر عنوان باقی می‌ماند</Text></View><Switch value={state.persianFirst} onValueChange={(persianFirst) => updateSettings({ persianFirst })} trackColor={{ false: palette.line, true: palette.primarySoft }} thumbColor={state.persianFirst ? palette.primary : palette.white} /></View></View><Pressable onPress={reset} style={({ pressed }) => [s.danger, pressed && s.pressed]}><Feather name="trash-2" size={18} color={palette.rose} /><Text style={s.dangerText}>پاک‌کردن داده و شروع دوباره</Text></Pressable><Notice /></Page>;
+  return <Page><Header eyebrow="حساب محلی" title="تنظیمات یادگیری" subtitle="اطلاعات شما فقط روی همین دستگاه ذخیره می‌شود." /><View style={s.profile}><View style={s.avatar}><Feather name="user" size={30} color={palette.white} /></View><View style={s.flexEnd}><Text style={s.profileName}>{state.name}</Text><Text style={s.profileMeta}>{state.completedLessons.length} درس · {streak} روز پیوسته</Text></View></View><View style={s.settings}><Text style={s.sectionTitle}>مشخصات</Text><Text style={s.label}>نام نمایشی</Text><View style={s.nameRow}><TextInput value={name} onChangeText={setName} style={s.nameInput} textAlign="right" /><Pressable onPress={() => updateSettings({ name: name.trim() || state.name })} style={s.save}><Text style={s.saveText}>ذخیره</Text></Pressable></View><Text style={s.label}>هدف روزانه</Text><GoalPicker value={state.dailyGoal} onChange={(dailyGoal) => updateSettings({ dailyGoal })} /></View><View style={s.settings}><Text style={s.sectionTitle}>ترجیحات</Text><View style={s.settingRow}><View style={s.iconSmall}><Feather name="align-right" size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>فارسی در اولویت</Text><Text style={s.hint}>اصطلاح انگلیسی زیر عنوان باقی می‌ماند</Text></View><Switch value={state.persianFirst} onValueChange={(persianFirst) => updateSettings({ persianFirst })} trackColor={{ false: palette.line, true: palette.primarySoft }} thumbColor={state.persianFirst ? palette.primary : palette.white} /></View></View><View style={s.settings}><Text style={s.sectionTitle}>شفافیت محتوا و انتشار</Text><View style={s.settingRow}><View style={s.iconSmall}><Feather name="database" size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>نسخه محتوایی ۲۰۲۵/۲۶</Text><Text style={s.hint}>{sqeTotals.lessons} واحد SQE · {sqeTotals.practiceQuestions} پرسش تمرینی ساختاریافته</Text></View></View><View style={s.settingRow}><View style={s.iconSmall}><Feather name="lock" size={19} color={palette.teal} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>حریم خصوصی آفلاین</Text><Text style={s.hint}>بدون حساب، تبلیغ یا analytics؛ پیشرفت فقط روی دستگاه ذخیره می‌شود.</Text></View></View><View style={s.settingRow}><View style={s.iconSmall}><Feather name="alert-circle" size={19} color={palette.rose} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>محصول مستقل</Text><Text style={s.hint}>وابسته یا مورد تأیید SRA یا Kaplan SQE نیست؛ آموزش عمومی، نه مشاوره حقوقی.</Text></View></View></View><Pressable onPress={reset} style={({ pressed }) => [s.danger, pressed && s.pressed]}><Feather name="trash-2" size={18} color={palette.rose} /><Text style={s.dangerText}>پاک‌کردن داده و شروع دوباره</Text></Pressable><Notice /></Page>;
 }
 
 function Page({ children }: { children: ReactNode }) {
@@ -414,7 +426,7 @@ function PathCard({ item, onPress }: { item: Pathway; onPress: () => void }) {
   const { state } = useLearner();
   const complete = item.lessonIds.filter((id) => state.completedLessons.includes(id)).length;
   const percent = Math.round((complete / item.lessonIds.length) * 100);
-  return <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [s.pathCard, pressed && s.pressed]}><View style={s.between}><View style={[s.pathIcon, { backgroundColor: item.softColor }]}><Feather name={item.icon} size={23} color={item.color} /></View><View style={s.chip}><Text style={s.chipText}>{item.level}</Text></View></View><Text style={s.cardTitle}>{item.title}</Text><Text style={[s.englishSmall, { color: item.color }]}>{item.englishTitle}</Text><Text style={s.hint}>{item.description}</Text><View style={s.cardFoot}><View style={s.between}><Text style={s.smallStrong}>{percent ? percent + '٪' : 'شروع نشده'}</Text><Text style={s.hint}>{item.lessonIds.length} درس</Text></View><ProgressBar value={percent} color={item.color} trackColor={item.softColor} /></View></Pressable>;
+  return <Pressable accessibilityRole="button" accessibilityLabel={`مسیر ${item.title}`} onPress={onPress} style={({ pressed }) => [s.pathCard, pressed && s.pressed]}><View style={s.between}><View style={[s.pathIcon, { backgroundColor: item.softColor }]}><Feather name={item.icon} size={23} color={item.color} /></View><View style={s.chip}><Text style={s.chipText}>{item.level}</Text></View></View><Text style={s.cardTitle}>{item.title}</Text><Text style={[s.englishSmall, { color: item.color }]}>{item.englishTitle}</Text><Text style={s.hint}>{item.description}</Text><View style={s.cardFoot}><View style={s.between}><Text style={s.smallStrong}>{percent ? percent + '٪' : 'شروع نشده'}</Text><Text style={s.hint}>{item.lessonIds.length} درس</Text></View><ProgressBar value={percent} color={item.color} trackColor={item.softColor} /></View></Pressable>;
 }
 function Empty({ icon, title, body }: { icon: IconName; title: string; body: string }) { return <View style={s.empty}><View style={s.iconHero}><Feather name={icon} size={30} color={palette.primary} /></View><Text style={s.sectionTitle}>{title}</Text><Text style={s.centerBody}>{body}</Text></View>; }
 function Notice() { return <View style={s.notice}><Feather name="shield" size={16} color={palette.muted} /><Text style={s.noticeText}>آموزش عمومی حقوق انگلستان و ولز؛ نه مشاوره حقوقی. قانون و مهلت‌ها ممکن است تغییر کنند.</Text></View>; }
@@ -565,4 +577,17 @@ const s = StyleSheet.create({
   questionNav: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 8 },
   breakdownRow: { minHeight: 74, flexDirection: 'row-reverse', alignItems: 'center', gap: 12, padding: 14, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.surface },
   breakdownScore: { minWidth: 58, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: palette.primarySoft },
+  learningList: { width: '100%', gap: 10, padding: 15, borderRadius: radius.md, backgroundColor: palette.background },
+  learningPoint: { flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 10 },
+  bulletDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: palette.primary, marginTop: 8 },
+  learningText: { flex: 1, color: palette.inkSoft, fontSize: 14, lineHeight: 25, textAlign: 'right', writingDirection: 'rtl' },
+  exampleCard: { width: '100%', flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 11, padding: 16, borderRadius: radius.md, backgroundColor: palette.saffronSoft, borderWidth: 1, borderColor: '#E9CC80' },
+  exampleLabel: { color: '#6E4900', fontSize: 12, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
+  exampleText: { color: '#5C430D', fontSize: 13, lineHeight: 23, textAlign: 'right', writingDirection: 'rtl', marginTop: 4 },
+  checklistCard: { width: '100%', gap: 10, padding: 16, borderRadius: radius.md, backgroundColor: palette.tealSoft },
+  checklistTitle: { color: palette.teal, fontSize: 13, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
+  checkRow: { flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 9 },
+  checkText: { flex: 1, color: '#195C57', fontSize: 13, lineHeight: 22, textAlign: 'right', writingDirection: 'rtl' },
+  sourceNote: { width: '100%', flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 8, paddingTop: 4 },
+  sourceText: { flex: 1, color: palette.muted, fontSize: 10, lineHeight: 18, textAlign: 'right', writingDirection: 'rtl' },
 });

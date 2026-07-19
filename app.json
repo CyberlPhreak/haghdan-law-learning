@@ -2,31 +2,51 @@
   "expo": {
     "name": "حق‌دان | HaghDān",
     "slug": "haghdan-law-learning",
+    "description": "آموزش فارسی‌محور حقوق انگلستان و ولز و آمادگی ساختاریافته SQE",
     "scheme": "haghdan",
     "version": "1.0.0",
     "orientation": "default",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "icon": "./assets/icon.png",
     "backgroundColor": "#F7F6FC",
     "primaryColor": "#4B3DB8",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0E2A5C"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.haghdan.learning",
-      "buildNumber": "1"
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.haghdan.learning",
       "versionCode": 1,
+      "permissions": [],
       "adaptiveIcon": {
-        "backgroundColor": "#4B3DB8"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0E2A5C"
       }
     },
     "web": {
       "bundler": "metro",
-      "name": "حق‌دان | آموزش حقوق",
+      "name": "حق‌دان | آموزش حقوق و SQE",
       "shortName": "حق‌دان",
       "themeColor": "#4B3DB8",
-      "backgroundColor": "#F7F6FC"
+      "backgroundColor": "#F7F6FC",
+      "favicon": "./assets/favicon.png"
+    },
+    "updates": {
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
     }
   }
 }

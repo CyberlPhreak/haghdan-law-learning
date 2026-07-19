@@ -1,32 +1,32 @@
 # HaghDān · حق‌دان
 
-A Persian-first, offline-capable learning app for understanding the law of England and Wales. It runs on Android, iOS, tablets, and the web from one Expo/React Native codebase.
+A Persian-first, offline-capable learning and practice app for the law of England and Wales, FLK1, FLK2 and SQE2 skills. One Expo/React Native codebase runs on Android, iOS, tablets and web.
 
-## What works
+## Product coverage
 
-- First-run onboarding with a learner name and daily study goal
-- Five complete learning pathways with 15 bilingual lessons
-- Section-by-section lessons, scored quizzes, explanations, and haptic feedback
-- Durable on-device progress, quiz scores, bookmarks, streaks, and daily goals
-- Adaptive spaced-repetition queue for correct and incorrect answers
-- Persian and English search across lessons and the legal glossary
-- Responsive bottom navigation on phones and sidebar navigation on desktop
-- Accessible controls, RTL reading layouts, safe-area support, and legal disclaimers
-- Resettable local profile and settings
-
-Progress is stored locally with AsyncStorage and works without an account. Cloud accounts and cross-device sync are intentionally not represented as complete features.
+- 14 SQE1 subject pathways across FLK1 and FLK2
+- All six SQE2 assessed legal skills
+- 103 structured learning units plus 15 everyday-law lessons
+- Five-part SQE lessons: overview, core knowledge, application method, guided scenario and exam clinic
+- Bilingual English/Persian legal terminology, examples and checklists
+- Six knowledge checks inside each FLK lesson and four rubric checks inside each SQE2 lesson
+- 948 unit-specific five-option practice checks across FLK1 and FLK2: 474 black-letter-law checks and 474 application, method and ethics checks
+- Quick 10-question, diagnostic 30-question and timed 90-question sessions
+- Subject-specific 20-question practice from every FLK pathway
+- Persistent results, bookmarks, streaks, daily goals and spaced review
+- Offline-first local storage with no account, advertising or analytics SDK
 
 ## Stable Expo baseline
 
-The project is pinned to Expo SDK 54.0.36, React Native 0.81.5, React 19.1.0, and Node 20.19.4. All native dependencies are exact-version pinned and pass Expo's SDK compatibility check.
+The project is pinned to Expo SDK 54.0.36, React Native 0.81.5 and React 19.1.0. Native dependencies are exact-version pinned.
 
-Expo Go must match SDK 54. On Android, use the matching build from:
+Expo Go must support SDK 54. On Android, obtain the matching client from:
 
 https://expo.dev/go?device=true&platform=android&sdkVersion=54
 
-On iPhone, update Expo Go from the App Store. Apple does not allow installing arbitrary older Expo Go versions on a physical iPhone; use a development build if the current store client no longer supports SDK 54.
+On iPhone, use the App Store version if it still supports SDK 54 or use an EAS development build.
 
-## Run on a phone
+## Run
 
 ```powershell
 nvm use 20.19.4
@@ -34,26 +34,33 @@ npm ci
 npm start
 ```
 
-Scan the QR code in the matching Expo Go app. The phone and computer must be able to reach each other on the same network.
-
-## Run on the web
+Web:
 
 ```powershell
 npm run web
 ```
 
-Open http://localhost:8084.
-
-## Validation
+## Validate
 
 ```powershell
 npm run typecheck
-node scripts/run-expo.cjs install --check
+npm run release:check
 npm run export:web
+npx expo-doctor
 ```
 
-## Product boundary
+## Publication preparation
 
-The app is now a functional offline-first MVP, not only a visual demo. A public commercial release still needs solicitor review of every lesson, privacy and terms documents, store assets, analytics consent decisions, and a production authentication/sync service if cross-device accounts are required.
+App icons, splash assets, native identifiers, EAS profiles, privacy policy, terms, editorial policy and draft store listings are included. Follow [PUBLISHING.md](./PUBLISHING.md).
 
-The content is general legal education, not legal advice. Law and procedural deadlines can change.
+The remaining release blockers require the publisher rather than code:
+
+- replace publisher/contact placeholders;
+- host privacy/support pages;
+- complete Apple and Google account setup;
+- obtain item-by-item legal editorial sign-off;
+- test signed builds on physical devices.
+
+## Content boundary
+
+The curriculum follows the published SRA assessment structure, but HaghDān is independent and is not approved by the SRA, Kaplan SQE or Pearson VUE. The practice bank is original and must not be represented as official past questions. Content is general education, not legal advice, and scores do not guarantee an examination pass.

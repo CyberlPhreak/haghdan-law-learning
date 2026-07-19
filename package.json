@@ -9,7 +9,10 @@
     "ios": "node scripts/run-expo.cjs start --ios --port 8084 --max-workers 1",
     "web": "node scripts/run-expo.cjs start --web --port 8084 --max-workers 1",
     "export:web": "node --max-old-space-size=4096 scripts/run-expo.cjs export --platform web --max-workers 1",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "release:check": "node scripts/release-check.cjs",
+    "build:preview": "npx eas-cli build --profile preview --platform all",
+    "build:production": "npx eas-cli build --profile production --platform all"
   },
   "dependencies": {
     "@expo-google-fonts/manrope": "0.4.2",

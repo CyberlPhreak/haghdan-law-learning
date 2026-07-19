@@ -4,7 +4,7 @@ import type { Feather } from '@expo/vector-icons';
 import { sqeLessons, sqePathways } from './sqe';
 
 export type IconName = ComponentProps<typeof Feather>['name'];
-export type LessonSection = { title: string; body: string; callout?: string; termFa: string; termEn: string };
+export type LessonSection = { title: string; body: string; callout?: string; bullets?: string[]; example?: string; checklist?: string[]; source?: string; termFa: string; termEn: string };
 export type QuizQuestion = { id: string; prompt: string; answers: string[]; correctIndex: number; explanation: string };
 export type Lesson = { id: string; pathwayId: string; title: string; englishTitle: string; duration: number; summary: string; sections: LessonSection[]; quiz: QuizQuestion[] };
 export type Pathway = { id: string; track?: 'FLK1' | 'FLK2' | 'SQE2' | 'EVERYDAY'; title: string; englishTitle: string; description: string; icon: IconName; color: string; softColor: string; level: string; lessonIds: string[] };

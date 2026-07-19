@@ -1,4 +1,5 @@
 import type { IconName, Lesson, Pathway, QuizQuestion } from './curriculum';
+import { flkKnowledge } from './sqe-knowledge';
 
 export type SqeStage = 'FLK1' | 'FLK2';
 export type SqeTrack = SqeStage | 'SQE2' | 'EVERYDAY';
@@ -265,42 +266,190 @@ const wrong = [
   'برای رسیدن به نتیجه دلخواه موکل می‌توان تشریفات و وظایف حرفه‌ای را نادیده گرفت.',
   'همه قواعد بدون توجه به تاریخ، قلمرو و نوع پرونده یکسان اعمال می‌شوند.',
   'وجود یک عنصر مرتبط، بدون تکمیل عناصر دیگر، نتیجه را قطعی می‌کند.',
+  'بهترین راه همیشه حفظ یک تعریف بدون اعمال آن بر سناریو است.',
+  'می‌توان ethics و professional conduct را تا پایان تحلیل کنار گذاشت.',
 ];
 
-const answerSet = (correct: string, salt: number) => {
+const scenarioContexts: Record<string, string> = {
+  'flk1-business': 'یک مدیر برای تصمیم مهم شرکت و پیامد مالی آن از مؤسسه راهنمایی می‌خواهد.',
+  'flk1-dispute': 'موکلی با یک اختلاف، اسناد ناقص و یک مهلت احتمالی برای طرح یا دفاع از دعوا مراجعه کرده است.',
+  'flk1-contract': 'دو طرف درباره وجود قرارداد، معنای یک شرط و راه‌حل پس از نقض اختلاف دارند.',
+  'flk1-tort': 'موکل پس از زیان مالی یا جسمی می‌خواهد بداند چه کسی مسئول است و چه خسارتی قابل مطالبه است.',
+  'flk1-system': 'برای انتخاب مرجع و منبع قانون باید نوع پرونده و جایگاه تصمیم قبلی مشخص شود.',
+  'flk1-public': 'یک مقام عمومی تصمیمی گرفته که بر حقوق فرد اثر دارد و قانونی‌بودن فرایند محل سؤال است.',
+  'flk1-services': 'وکیل بین دستور موکل، محرمانگی، تعارض احتمالی و وظیفه حرفه‌ای باید تصمیم بگیرد.',
+  'flk2-property': 'خریدار و lender پیش از exchange درباره title، searches و ریسک‌های ملک پاسخ می‌خواهند.',
+  'flk2-wills': 'پس از فوت، اعتبار وصیت، اختیار نماینده و ترتیب پرداخت و توزیع estate باید روشن شود.',
+  'flk2-accounts': 'مؤسسه وجهی دریافت کرده و باید ماهیت پول، ledger و انتقال مجاز را درست ثبت کند.',
+  'flk2-land': 'خریدار ملکی با حق ثبت‌نشده یا تعهد قبلی می‌خواهد بداند آن حق علیه او قابل اجراست یا نه.',
+  'flk2-trusts': 'beneficiary درباره ایجاد trust، رفتار trustee و remedy پس از breach پرسش دارد.',
+  'flk2-crime': 'facts پرونده باید عنصر به عنصر با offence، mens rea، participation و defence تطبیق داده شود.',
+  'flk2-criminal-practice': 'متهم از نخستین تماس با پلیس تا trial، sentence یا appeal به advice مرحله‌ای نیاز دارد.',
+  'sqe2-interview': 'ایمیل partner و چند سند اولیه دارید؛ باید اطلاعات لازم را از موکل بگیرید و attendance note بنویسید.',
+  'sqe2-advocacy': 'bundle کوتاهی دریافت کرده‌اید و باید order مشخصی را در برابر قاضی درخواست کنید.',
+  'sqe2-analysis': 'پرونده‌ای با facts موافق و مخالف دارید و partner یک گزارش عملی و client-focused می‌خواهد.',
+  'sqe2-research': 'partner درباره مسئله‌ای محدود از شما research، authority و advice قابل استفاده می‌خواهد.',
+  'sqe2-writing': 'باید برای یک مخاطب مشخص نامه یا ایمیلی روشن، دقیق و متناسب با هدف موکل بنویسید.',
+  'sqe2-drafting': 'باید precedent را با instructions و facts پرونده تطبیق دهید و clauses مؤثر بسازید.',
+};
+
+const splitFocus = (focus: string) => focus.split('،').map(item => item.trim()).filter(Boolean);
+
+const answerSet = (correct: string, salt: number, alternatives: string[] = []) => {
+  const candidates = [...alternatives, ...wrong].filter((value, index, all) => value !== correct && all.indexOf(value) === index);
+  const distractors = candidates.slice(0, 4);
+  while (distractors.length < 4) distractors.push(`این گزینه مرحله ${distractors.length + 1} تحلیل را بدون دلیل حذف می‌کند.`);
   const correctIndex = salt % 5;
-  const answers = [...wrong];
+  const answers = [...distractors];
   answers.splice(correctIndex, 0, correct);
   return { answers, correctIndex };
 };
 
+const peerDistractors = (subject: Seed, unitId: string) => subject.units
+  .map(row)
+  .filter(unit => unit.id !== unitId)
+  .slice(0, 4)
+  .map(unit => flkKnowledge[unit.id]?.[0] ?? ('تحلیل را فقط به «' + unit.fa + '» و این موارد محدود کنید: ' + unit.focus + '.'));
+
 const makeQuestion = (subject: Seed, raw: string, variant: number): SqeQuestion => {
   const unit = row(raw);
-  const correct = variant === 0 ? subject.framework : variant === 1
-    ? `موارد اصلی این واحد را منظم بررسی کنید: ${unit.focus}.`
-    : `همه عناصر، facts نامطلوب، ethics و remedy را پیش از نتیجه نهایی کنترل کنید.`;
+  const topics = splitFocus(unit.focus);
+  const rules = flkKnowledge[unit.id] ?? topics.map(topic => 'قاعده، عناصر، استثناها و اثر عملیِ ' + topic + ' را مشخص کنید.');
+  const scenario = scenarioContexts[subject.id] ?? 'یک موکل با مسئله‌ای چندمرحله‌ای برای advice مراجعه کرده است.';
+  const correctAnswers = [
+    rules[0]!,
+    rules[1] ?? rules[0]!,
+    rules[0]!,
+    rules[1] ?? rules[0]!,
+    rules[0]!,
+    rules[1] ?? rules[0]!,
+    'ابتدا chronology، parties، هدف موکل و facts گمشده را مشخص کنید؛ سپس عناصر «' + unit.fa + '» را اعمال کنید.',
+    'در کنار قانون، هر تعارض، محرمانگی، صداقت، duty to court و public trust مرتبط را مستقل بررسی کنید.',
+    'پس از liability یا entitlement، remedy، deadline، costs و next step عملی را جداگانه بررسی کنید.',
+    'اگر facts کافی نیست، conclusion مشروط بدهید و دقیقاً بگویید چه اطلاعات یا سندی باید تهیه شود.',
+    'هدف موکل، ریسک، زمان و هزینه را در advice وارد کنید و صرفاً قانون انتزاعی را تکرار نکنید.',
+    'بهترین پاسخ، قاعده درست را جامع اما متناسب با سطح Day One Solicitor روی scenario اعمال می‌کند.',
+  ];
+  const prompts = [
+    'کدام گزاره، قاعده اصلی «' + unit.fa + '» را دقیق‌تر بیان می‌کند؟',
+    'در advice مربوط به «' + unit.fa + '»، کدام proposition قانونی صحیح‌تر است؟',
+    scenario + ' کدام قاعده باید در تحلیل اعمال شود؟',
+    'کدام گزینه درباره عناصر یا اثر حقوقی «' + unit.fa + '» درست‌تر است؟',
+    'برای رد گزینه‌های ناقص در «' + unit.fa + '»، کدام قاعده تعیین‌کننده است؟',
+    'کدام statement باید در یادداشت حقوقی این موضوع گنجانده شود؟',
+    'بعد از تعیین قاعده اصلی، کدام مرحله نباید فراموش شود؟',
+    'در تحلیل این scenario، ethics چگونه باید وارد شود؟',
+    'اگر اطلاعات سناریو ناقص باشد، بهترین advice چیست؟',
+    'کدام پاسخ واقعاً client-focused است؟',
+    'در بازبینی نهایی پاسخ، چه کاری مفیدتر است؟',
+    'کدام گزینه با استاندارد کاربرد قانون در SQE1 سازگارتر است؟',
+  ];
+  const correct = correctAnswers[variant % correctAnswers.length]!;
+  const alternatives = [
+    ...peerDistractors(subject, unit.id),
+    topics.length > 1 ? `فقط «${topics[0]}» را بررسی کنید و «${topics.slice(1).join('، ')}» را کنار بگذارید.` : wrong[0]!,
+  ];
   return {
-    id:`${subject.stage.toLowerCase()}-${unit.id}-q${variant + 1}`,stage:subject.stage as SqeStage,
-    subjectId:subject.id,unitId:unit.id,
-    prompt:variant===0?`بهترین چارچوب شروع برای «${unit.fa}» کدام است؟`:variant===1?`در سناریوی «${unit.fa}» چه مواردی باید بررسی شوند؟`:`کدام رویکرد خطر خطای آزمونی در «${unit.fa}» را کمتر می‌کند؟`,
-    ...answerSet(correct, subject.id.length + unit.id.length + variant),
-    explanation:`${subject.framework} تمرکز این واحد: ${unit.focus}.`,
+    id: `${subject.stage.toLowerCase()}-${unit.id}-q${variant + 1}`,
+    stage: subject.stage as SqeStage,
+    subjectId: subject.id,
+    unitId: unit.id,
+    prompt: prompts[variant % prompts.length]!,
+    ...answerSet(correct, subject.id.length + unit.id.length + variant, alternatives),
+    explanation: 'قواعد کلیدی: ' + rules.join(' ') + ' چارچوب کاربردی: ' + subject.framework + ' پاسخ باید law، facts، ethics و نتیجه عملی را به هم متصل کند.',
+  };
+};
+
+const makeSkillQuiz = (subject: Seed, unit: ReturnType<typeof row>, index: number): QuizQuestion => {
+  const correctAnswers = [
+    `خروجی را با skills criteria، application of law، ethics و client focus بازبینی کنید.`,
+    `زمان را میان planning، execution و final review تقسیم کنید و یک خروجی usable تحویل دهید.`,
+    `facts مرتبط را انتخاب و advice یا drafting را برای مخاطب و هدف مشخص تنظیم کنید.`,
+    `هر uncertainty را صادقانه مشخص و next step عملی را بیان کنید.`,
+  ];
+  const prompts = [
+    'بهترین self-review برای این ایستگاه چیست؟',
+    'مدیریت زمان این تمرین چگونه باید باشد؟',
+    'کدام رویکرد با معیارهای SQE2 سازگارتر است؟',
+    'با یک نکته نامطمئن چگونه برخورد می‌کنید؟',
+  ];
+  return {
+    id: `${unit.id}-skill-${index + 1}`,
+    prompt: prompts[index]!,
+    ...answerSet(correctAnswers[index]!, index + unit.id.length, peerDistractors(subject, unit.id)),
+    explanation: `${subject.framework} تمرکز تمرین: ${unit.focus}.`,
   };
 };
 
 const makeLesson = (subject: Seed, raw: string): Lesson => {
   const unit = row(raw);
   const practical = subject.stage === 'SQE2';
+  const topics = splitFocus(unit.focus);
+  const rules = flkKnowledge[unit.id] ?? topics.map(topic => 'قاعده، عناصر، استثناها و اثر عملیِ ' + topic + ' را مشخص کنید.');
+  const scenario = scenarioContexts[subject.id] ?? 'یک موکل با مسئله‌ای چندمرحله‌ای مراجعه کرده است.';
+  const applicationChecklist = practical
+    ? ['دستور و هدف خروجی را در یک جمله مشخص کنید.', 'facts و law مرتبط را از مطالب حاشیه‌ای جدا کنید.', 'خروجی را برای مخاطب و زمان ایستگاه تنظیم کنید.', 'ethics و application of law را صریح بازبینی کنید.']
+    : ['lead-in را قبل از گزینه‌ها بخوانید.', 'قاعده و همه عناصر آن را مشخص کنید.', 'هر عنصر را روی facts موافق و مخالف اعمال کنید.', 'ethics، remedy، procedure و deadline را کنترل کنید.', 'پنج گزینه را با همان legal test مقایسه کنید.'];
+  const quiz = practical
+    ? [0, 1, 2, 3].map(index => makeSkillQuiz(subject, unit, index))
+    : [0, 1, 2, 3, 4, 5].map(variant => makeQuestion(subject, raw, variant));
   return {
-    id:unit.id,pathwayId:subject.id,title:unit.fa,englishTitle:unit.en,duration:practical?14:10,summary:unit.focus,
-    sections:[
-      {title:practical?'چارچوب ایستگاه':'نقشه مبحث',body:subject.framework,callout:practical?'در SQE2، مهارت و application of law وزن برابر دارند.':'SQE1 کاربرد قانون در یک سناریوی موکل است، نه حفظ تعریف.',termFa:unit.fa,termEn:unit.en},
-      {title:practical?'تمرین و self-review':'چک‌لیست حل سؤال',body:`این موضوعات را تسلط پیدا کنید: ${unit.focus}.`,callout:'ethics، تاریخ قانون، قلمرو England/Wales و همه گزینه‌ها را کنترل کنید.',termFa:practical?'خودارزیابی':'کاربرد قانون',termEn:practical?'Self-assessment':'Application of law'},
+    id: unit.id,
+    pathwayId: subject.id,
+    title: unit.fa,
+    englishTitle: unit.en,
+    duration: practical ? 22 : 18,
+    summary: unit.focus,
+    sections: [
+      {
+        title: 'تصویر کلی و جایگاه مبحث',
+        body: `${subject.framework} این واحد نشان می‌دهد «${unit.fa}» چگونه در یک مسئله واقعی و در کنار سایر مباحث ${subject.fa} قرار می‌گیرد.`,
+        callout: practical ? 'در SQE2، skills و application of law در امتیاز نهایی وزن برابر دارند.' : 'SQE1 حافظه صرف را نمی‌سنجد؛ باید rule را روی scenario یک موکل اعمال کنید.',
+        bullets: rules,
+        termFa: unit.fa,
+        termEn: unit.en,
+      },
+      {
+        title: 'دانش و واژگان لازم',
+        body: 'پیش از حل سؤال باید اجزای زیر را از هم تفکیک کنید. برای هر جزء، قاعده، facts لازم و نتیجه احتمالی را به زبان خودتان توضیح دهید.',
+        bullets: topics,
+        checklist: ['کدام facts هر عنصر را پشتیبانی می‌کند؟', 'چه fact نامطلوب یا استثنایی ممکن است نتیجه را تغییر دهد؟', 'بار اثبات، تشریفات یا مهلت بر عهده چه کسی است؟'],
+        callout: `محدوده این واحد: ${unit.focus}.`,
+        termFa: 'دانش کارکردی',
+        termEn: 'Functioning legal knowledge',
+      },
+      {
+        title: practical ? 'روش اجرای مهارت' : 'روش اعمال قانون',
+        body: practical
+          ? 'یک پاسخ حرفه‌ای باید از planning کوتاه به execution منظم و سپس final review برسد. خروجی باید برای partner، client، court یا recipient واقعاً قابل استفاده باشد.'
+          : 'قاعده را به‌صورت مرحله‌ای روی facts اعمال کنید. ابتدا مسئله را شناسایی کنید، سپس test قانونی را بنویسید و برای هر عنصر از facts استفاده کنید؛ بعد نتیجه و اقدام عملی را ارائه دهید.',
+        checklist: applicationChecklist,
+        example: practical ? `${scenario} خروجی شما باید هم از نظر مهارت و هم از نظر قانون قابل دفاع باشد.` : `${scenario} پاسخ خوب توضیح می‌دهد کدام facts نتیجه را تقویت یا تضعیف می‌کنند و چرا یک گزینه از چهار گزینه دیگر بهتر است.`,
+        termFa: practical ? 'معیار مهارت' : 'اعمال قانون',
+        termEn: practical ? 'Skills criterion' : 'Application of law',
+      },
+      {
+        title: 'سناریوی تمرینی هدایت‌شده',
+        body: scenario,
+        example: `فرض کنید اسناد اولیه فقط بخشی از این موارد را پوشش می‌دهد: ${unit.focus}. یک فهرست از facts موجود، facts گمشده، قاعده احتمالی، ethics و next steps بسازید.`,
+        checklist: ['هدف موکل یا دستور partner چیست؟', 'سه fact تعیین‌کننده کدام‌اند؟', 'کدام قاعده یا عنصر هنوز evidence ندارد؟', 'نتیجه موقت و اقدام بعدی چیست؟'],
+        callout: 'نتیجه را قطعی اعلام نکنید مگر facts برای تمام عناصر کافی باشد.',
+        termFa: 'تحلیل سناریو',
+        termEn: 'Scenario analysis',
+      },
+      {
+        title: 'Exam clinic و جمع‌بندی',
+        body: practical
+          ? 'پاسخ خود را با performance indicators همان مهارت مقایسه کنید: clarity، structure، client focus، legal accuracy، comprehensiveness و ethics.'
+          : 'در سؤال SBA، هر پنج گزینه ممکن است ظاهراً حقوقی باشند. پاسخ درست گزینه‌ای است که lead-in را دقیق جواب می‌دهد و قاعده را کامل و متناسب با facts اعمال می‌کند.',
+        bullets: ['از نتیجه‌گیری فقط بر اساس یک keyword خودداری کنید.', 'تاریخ cut-off قانون و تفاوت احتمالی England و Wales را کنترل کنید.', 'ethics حتی اگر در سؤال علامت‌گذاری نشده باشد pervasive است.', 'پس از هر پاسخ، دلیل رد چهار گزینه دیگر را بیان کنید.'],
+        source: practical ? 'ساختار آموزشی بر مبنای SQE2 Assessment Specification و performance criteria است.' : 'ساختار آموزشی بر مبنای SQE1 Assessment Specification و الگوی رسمی SBA است.',
+        callout: 'این محتوا آموزش عمومی است و پیش از انتشار تجاری باید توسط solicitor واجد صلاحیت بازبینی حقوقی شود.',
+        termFa: 'بهترین پاسخ واحد',
+        termEn: practical ? 'Performance indicators' : 'Single best answer',
+      },
     ],
-    quiz:[
-      {id:`${unit.id}-check-1`,prompt:'بهترین چارچوب شروع کدام است؟',...answerSet(subject.framework,1),explanation:subject.framework},
-      {id:`${unit.id}-check-2`,prompt:`تمرکز اصلی «${unit.fa}» چیست؟`,...answerSet(unit.focus,3),explanation:unit.focus},
-    ],
+    quiz,
   };
 };
 
@@ -311,7 +460,7 @@ export const sqePathways: Pathway[] = seeds.map(subject => ({
   lessonIds:subject.units.map(raw => row(raw).id),
 }));
 export const sqeQuestions: SqeQuestion[] = seeds.filter(subject => subject.stage==='FLK1'||subject.stage==='FLK2').flatMap(subject =>
-  subject.units.flatMap(raw => [0,1,2].map(variant => makeQuestion(subject,raw,variant))),
+  subject.units.flatMap(raw => Array.from({ length: 12 }, (_, variant) => makeQuestion(subject, raw, variant))),
 );
 export const questionsForStage = (stage: SqeStage) => sqeQuestions.filter(question => question.stage === stage);
 export const stageSubjects = (track: SqeTrack) => sqePathways.filter(pathway => pathway.track === track);

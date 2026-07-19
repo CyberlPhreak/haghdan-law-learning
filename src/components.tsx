@@ -1,8 +1,9 @@
 import { Feather } from '@expo/vector-icons';
 import { useMemo, type PropsWithChildren } from 'react';
-import { Pressable, StyleSheet, Text, View, type DimensionValue, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, Text, View, type DimensionValue, type StyleProp, type ViewStyle } from 'react-native';
 
 import type { IconName, Pathway } from './data';
+import { SoundPressable as Pressable } from './sound';
 import { createShadow, radius, themedAccentColor, themedSoftColor, type, useAppTheme, type AppPalette } from './theme';
 
 const useComponentTheme = () => {
@@ -45,6 +46,7 @@ export function ActionButton({
   variant = 'primary',
   fullWidth = false,
   disabled = false,
+  sound = true,
 }: {
   label: string;
   onPress: () => void;
@@ -52,6 +54,7 @@ export function ActionButton({
   variant?: 'primary' | 'secondary' | 'quiet';
   fullWidth?: boolean;
   disabled?: boolean;
+  sound?: boolean;
 }) {
   const { palette, styles } = useComponentTheme();
   const foreground = variant === 'primary' ? palette.onPrimaryAction : variant === 'secondary' ? palette.primary : palette.inkSoft;
@@ -61,6 +64,7 @@ export function ActionButton({
       accessibilityLabel={label}
       accessibilityState={{ disabled }}
       disabled={disabled}
+      sound={sound}
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,

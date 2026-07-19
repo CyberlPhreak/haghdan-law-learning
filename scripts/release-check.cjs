@@ -19,8 +19,12 @@ const storeSource = fs.readFileSync('src/store.tsx', 'utf8');
 const navigationSource = fs.readFileSync('src/navigation.tsx', 'utf8');
 if (app.userInterfaceStyle === 'automatic' && themeSource.includes('darkPalette') && storeSource.includes('themeMode') && navigationSource.includes('ThemePicker')) pass('Persisted system, light and dark appearance modes configured');
 else fail('Complete appearance-mode configuration is missing');
+const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+const soundSource = fs.readFileSync('src/sound.tsx', 'utf8');
+if (packageJson.dependencies?.['expo-audio'] === '1.1.1' && soundSource.includes('SoundProvider') && storeSource.includes('soundEffectsEnabled')) pass('Optional local sound feedback configured');
+else fail('Sound feedback configuration is missing');
 
-['assets/icon.png','assets/adaptive-icon.png','assets/splash-icon.png','assets/favicon.png','docs/PRIVACY_POLICY.md','docs/TERMS_AND_DISCLAIMER.md','docs/EDITORIAL_POLICY.md','eas.json','PUBLISHING.md'].forEach(path => requireFile(path, path.endsWith('.png') ? 1000 : 100));
+['assets/icon.png','assets/adaptive-icon.png','assets/splash-icon.png','assets/favicon.png','assets/sounds/tap.wav','assets/sounds/correct-clap.wav','assets/sounds/incorrect.wav','docs/PRIVACY_POLICY.md','docs/TERMS_AND_DISCLAIMER.md','docs/EDITORIAL_POLICY.md','eas.json','PUBLISHING.md'].forEach(path => requireFile(path, path.endsWith('.png') || path.endsWith('.wav') ? 1000 : 100));
 
 const curriculum = fs.readFileSync('src/sqe.ts', 'utf8');
 const knowledge = fs.readFileSync('src/sqe-knowledge.ts', 'utf8');

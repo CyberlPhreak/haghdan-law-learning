@@ -9,7 +9,6 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Switch,
@@ -23,6 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActionButton, Brand, ProgressBar } from './components';
 import { glossary, lessonById, lessons, pathwayById, pathways, type IconName, type Lesson, type Pathway, type QuizQuestion } from './curriculum';
 import { questionsForStage, sqeTotals, stageSubjects, type SqeStage, type SqeTrack } from './sqe';
+import { SoundPressable as Pressable, useSoundFeedback } from './sound';
 import { useLearner, type ThemeMode } from './store';
 import { createShadow, lightPalette, radius, space, themedAccentColor, themedSoftColor, type, useAppTheme, type AppPalette } from './theme';
 
@@ -81,9 +81,10 @@ function Loading() {
 
 function MainTabs() {
   const { width } = useWindowDimensions();
+  const { playTap } = useSoundFeedback();
   const desktop = width >= 980;
   return (
-    <Tabs.Navigator screenOptions={({ route }) => ({
+    <Tabs.Navigator screenListeners={{ tabPress: playTap }} screenOptions={({ route }) => ({
       headerShown: false,
       tabBarPosition: desktop ? 'left' : 'bottom',
       tabBarActiveTintColor: palette.primary,
@@ -233,6 +234,7 @@ function LessonScreen({ route, navigation }: LessonProps) {
   const [revealed, setRevealed] = useState(false);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [finished, setFinished] = useState(false);
+  const { playCorrect, playIncorrect } = useSoundFeedback();
   if (!item) return null;
   const total = item.sections.length + item.quiz.length;
   const step = quiz < 0 ? section : item.sections.length + quiz;
@@ -250,7 +252,10 @@ function LessonScreen({ route, navigation }: LessonProps) {
     if (!revealed) {
       setAnswers({ ...answers, [question.id]: selected });
       setRevealed(true);
-      void Haptics.selectionAsync();
+      const correct = selected === question.correctIndex;
+      if (correct) playCorrect();
+      else playIncorrect();
+      void Haptics.notificationAsync(correct ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning);
       return;
     }
     const final = { ...answers, [question.id]: selected };
@@ -274,7 +279,7 @@ function LessonScreen({ route, navigation }: LessonProps) {
         : quiz < 0 ? <LessonSection item={item} index={section} />
         : question ? <QuizCard question={question} selected={selected} revealed={revealed} onSelect={setSelected} /> : null}
       </ScrollView>
-      {!finished ? <View style={s.lessonFooter}><ActionButton label={quiz < 0 ? (section === item.sections.length - 1 ? 'شروع آزمون کوتاه' : 'بخش بعد') : revealed ? (quiz === item.quiz.length - 1 ? 'ثبت نتیجه' : 'پرسش بعد') : 'بررسی پاسخ'} icon="arrow-left" onPress={advance} disabled={quiz >= 0 && selected === null} fullWidth /></View> : null}
+      {!finished ? <View style={s.lessonFooter}><ActionButton label={quiz < 0 ? (section === item.sections.length - 1 ? 'شروع آزمون کوتاه' : 'بخش بعد') : revealed ? (quiz === item.quiz.length - 1 ? 'ثبت نتیجه' : 'پرسش بعد') : 'بررسی پاسخ'} icon="arrow-left" onPress={advance} disabled={quiz >= 0 && selected === null} sound={quiz < 0 || revealed} fullWidth /></View> : null}
     </SafeAreaView>
   );
 }
@@ -302,7 +307,7 @@ function QuizCard({ question, selected, revealed, onSelect }: { question: QuizQu
     const good = revealed && index === question.correctIndex;
     const bad = revealed && chosen && !good;
     return <Pressable key={answer} disabled={revealed} accessibilityRole="radio" accessibilityState={{ checked: chosen }} onPress={() => onSelect(index)} style={({ pressed }) => [s.answer, chosen && s.answerChosen, good && s.answerGood, bad && s.answerBad, pressed && !revealed && s.pressed]}><View style={[s.radio, chosen && s.radioChosen, good && s.done, bad && s.radioBad]}>{chosen || good ? <Feather name={good ? 'check' : bad ? 'x' : 'circle'} size={13} color={palette.white} /> : null}</View><Text style={s.answerText}>{answer}</Text></Pressable>;
-  })}</View>{revealed ? <View style={[s.feedback, isCorrect ? s.feedbackGood : s.feedbackBad]}><Feather name={isCorrect ? 'check-circle' : 'info'} size={20} color={isCorrect ? palette.success : palette.rose} /><View style={s.flexEnd}><Text style={s.smallStrong}>{isCorrect ? 'درست بود' : 'دوباره مرور کنیم'}</Text><Text style={s.hint}>{question.explanation}</Text></View></View> : null}</View>;
+  })}</View>{revealed ? <View style={[s.feedback, isCorrect ? s.feedbackGood : s.feedbackBad]} accessibilityLiveRegion="polite"><View style={s.feedbackSymbol}>{isCorrect ? <Text style={s.feedbackEmoji} accessibilityLabel="تشویق">👏</Text> : <Feather name="info" size={20} color={palette.rose} />}</View><View style={s.flexEnd}><Text style={s.smallStrong}>{isCorrect ? 'آفرین! درست بود' : 'اشکالی ندارد؛ دوباره مرور کنیم'}</Text><Text style={s.hint}>{question.explanation}</Text></View></View> : null}</View>;
 }
 
 type TestProps = NativeStackScreenProps<RootStackParamList, 'Test'>;
@@ -375,6 +380,7 @@ function TestScreen({ route, navigation }: TestProps) {
 
 function Review() {
   const { state, reviewAnswer } = useLearner();
+  const { playCorrect, playIncorrect } = useSoundFeedback();
   const [selected, setSelected] = useState<number | null>(null);
   const [revealed, setRevealed] = useState(false);
   const due = state.reviewQueue.filter((entry) => new Date(entry.dueAt) <= new Date());
@@ -383,11 +389,18 @@ function Review() {
   const question = lesson?.quiz.find((entry) => entry.id === record!.questionId);
   const advance = () => {
     if (!record || !question || selected === null) return;
-    if (!revealed) { setRevealed(true); return; }
+    if (!revealed) {
+      const correct = selected === question.correctIndex;
+      setRevealed(true);
+      if (correct) playCorrect();
+      else playIncorrect();
+      void Haptics.notificationAsync(correct ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
     reviewAnswer(record!.questionId, selected === question.correctIndex);
     setSelected(null); setRevealed(false);
   };
-  return <Page><Header eyebrow="حافظه فعال" title="مرور فاصله‌دار" subtitle="پرسش‌ها در زمان مناسب برای تثبیت حافظه برمی‌گردند." /><View style={s.stats}><Stat icon="inbox" value={String(due.length)} label="اکنون آماده" color={palette.primary} soft={palette.primarySoft} /><Stat icon="calendar" value={String(state.reviewQueue.length - due.length)} label="برای بعد" color={palette.teal} soft={palette.tealSoft} /></View>{question ? <View style={s.list}><Text style={s.hint}>{lesson?.title}</Text><QuizCard question={question} selected={selected} revealed={revealed} onSelect={setSelected} /><ActionButton label={revealed ? 'ثبت و ادامه' : 'بررسی پاسخ'} icon="arrow-left" onPress={advance} disabled={selected === null} fullWidth /></View> : <Empty icon="check-circle" title="مرور امروز تمام شد" body={state.reviewQueue.length ? 'پرسش‌های بعدی طبق برنامه ظاهر می‌شوند.' : 'پس از اولین درس، پرسش‌ها خودکار به اینجا اضافه می‌شوند.'} />}<Notice /></Page>;
+  return <Page><Header eyebrow="حافظه فعال" title="مرور فاصله‌دار" subtitle="پرسش‌ها در زمان مناسب برای تثبیت حافظه برمی‌گردند." /><View style={s.stats}><Stat icon="inbox" value={String(due.length)} label="اکنون آماده" color={palette.primary} soft={palette.primarySoft} /><Stat icon="calendar" value={String(state.reviewQueue.length - due.length)} label="برای بعد" color={palette.teal} soft={palette.tealSoft} /></View>{question ? <View style={s.list}><Text style={s.hint}>{lesson?.title}</Text><QuizCard question={question} selected={selected} revealed={revealed} onSelect={setSelected} /><ActionButton label={revealed ? 'ثبت و ادامه' : 'بررسی پاسخ'} icon="arrow-left" onPress={advance} disabled={selected === null} sound={revealed} fullWidth /></View> : <Empty icon="check-circle" title="مرور امروز تمام شد" body={state.reviewQueue.length ? 'پرسش‌های بعدی طبق برنامه ظاهر می‌شوند.' : 'پس از اولین درس، پرسش‌ها خودکار به اینجا اضافه می‌شوند.'} />}<Notice /></Page>;
 }
 
 function Practice() {
@@ -414,6 +427,7 @@ function Practice() {
 
 function Profile() {
   const { state, streak, updateSettings, resetProgress } = useLearner();
+  const { playTap } = useSoundFeedback();
   const [name, setName] = useState(state.name);
   const reset = () => Alert.alert('پاک‌کردن پیشرفت؟', 'همه درس‌ها و امتیازهای محلی حذف می‌شوند.', [{ text: 'انصراف', style: 'cancel' }, { text: 'پاک کردن', style: 'destructive', onPress: () => void resetProgress() }]);
   return (
@@ -440,6 +454,11 @@ function Profile() {
           <Text style={s.hint}>روشن، تاریک یا هماهنگ با تنظیمات دستگاه</Text>
         </View>
         <ThemePicker value={state.themeMode} onChange={(themeMode) => updateSettings({ themeMode })} />
+        <View style={s.settingRow}>
+          <View style={s.iconSmall}><Feather name="volume-2" size={19} color={palette.primary} /></View>
+          <View style={s.flexEnd}><Text style={s.cardTitle}>بازخورد صوتی</Text><Text style={s.hint}>صدای کوتاه برای لمس، پاسخ درست و پاسخ نادرست</Text></View>
+          <Switch accessibilityLabel="بازخورد صوتی" value={state.soundEffectsEnabled} onValueChange={(soundEffectsEnabled) => { if (state.soundEffectsEnabled) playTap(); updateSettings({ soundEffectsEnabled }); }} trackColor={{ false: palette.line, true: palette.primarySoft }} thumbColor={state.soundEffectsEnabled ? palette.primary : palette.muted} />
+        </View>
         <View style={s.settingRow}>
           <View style={s.iconSmall}><Feather name="align-right" size={19} color={palette.primary} /></View>
           <View style={s.flexEnd}><Text style={s.cardTitle}>فارسی در اولویت</Text><Text style={s.hint}>اصطلاح انگلیسی زیر عنوان باقی می‌ماند</Text></View>
@@ -605,6 +624,8 @@ const createStyles = (palette: AppPalette) => {
   feedback: { width: '100%', flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 10, padding: 14, borderRadius: radius.md },
   feedbackGood: { backgroundColor: palette.tealSoft },
   feedbackBad: { backgroundColor: palette.roseSoft },
+  feedbackSymbol: { width: 30, minHeight: 30, alignItems: 'center', justifyContent: 'center' },
+  feedbackEmoji: { fontSize: 27, lineHeight: 32 },
   result: { gap: 10, padding: 28, alignItems: 'center', borderWidth: 1, borderColor: palette.line, borderRadius: radius.xl, backgroundColor: palette.surface, ...shadow },
   resultIcon: { width: 70, height: 70, borderRadius: 23, backgroundColor: palette.success, alignItems: 'center', justifyContent: 'center' },
   score: { color: palette.primary, fontSize: 46, fontFamily: type.latinBold },

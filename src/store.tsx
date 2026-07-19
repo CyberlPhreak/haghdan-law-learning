@@ -25,12 +25,13 @@ export type LearnerState = {
   reviewQueue: ReviewRecord[];
   activeDays: string[];
   audioEnabled: boolean;
+  soundEffectsEnabled: boolean;
   persianFirst: boolean;
   themeMode: ThemeMode;
   testHistory: TestAttempt[];
 };
 
-type SettingsPatch = Partial<Pick<LearnerState, 'name' | 'dailyGoal' | 'audioEnabled' | 'persianFirst' | 'themeMode'>>;
+type SettingsPatch = Partial<Pick<LearnerState, 'name' | 'dailyGoal' | 'audioEnabled' | 'soundEffectsEnabled' | 'persianFirst' | 'themeMode'>>;
 
 type StoreValue = {
   state: LearnerState;
@@ -59,6 +60,7 @@ const initialState: LearnerState = {
   reviewQueue: [],
   activeDays: [],
   audioEnabled: false,
+  soundEffectsEnabled: true,
   persianFirst: true,
   themeMode: 'system',
   testHistory: [],

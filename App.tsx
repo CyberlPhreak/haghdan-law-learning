@@ -10,6 +10,7 @@ import { ActivityIndicator, StyleSheet, View, useColorScheme } from 'react-nativ
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { HaghDanApp } from './src/navigation';
+import { SoundProvider } from './src/sound';
 import { LearnerProvider, useLearner } from './src/store';
 import { AppThemeProvider, darkPalette, lightPalette, useAppTheme } from './src/theme';
 
@@ -17,7 +18,9 @@ function ThemedApplication() {
   const { state } = useLearner();
   return (
     <AppThemeProvider mode={state.themeMode}>
-      <ApplicationChrome />
+      <SoundProvider>
+        <ApplicationChrome />
+      </SoundProvider>
     </AppThemeProvider>
   );
 }

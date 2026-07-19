@@ -1,11 +1,13 @@
 import type { ComponentProps } from 'react';
 import type { Feather } from '@expo/vector-icons';
 
+import { sqeLessons, sqePathways } from './sqe';
+
 export type IconName = ComponentProps<typeof Feather>['name'];
 export type LessonSection = { title: string; body: string; callout?: string; termFa: string; termEn: string };
 export type QuizQuestion = { id: string; prompt: string; answers: string[]; correctIndex: number; explanation: string };
 export type Lesson = { id: string; pathwayId: string; title: string; englishTitle: string; duration: number; summary: string; sections: LessonSection[]; quiz: QuizQuestion[] };
-export type Pathway = { id: string; title: string; englishTitle: string; description: string; icon: IconName; color: string; softColor: string; level: string; lessonIds: string[] };
+export type Pathway = { id: string; track?: 'FLK1' | 'FLK2' | 'SQE2' | 'EVERYDAY'; title: string; englishTitle: string; description: string; icon: IconName; color: string; softColor: string; level: string; lessonIds: string[] };
 
 const q = (id: string, prompt: string, answers: string[], correctIndex: number, explanation: string): QuizQuestion =>
   ({ id, prompt, answers, correctIndex, explanation });
@@ -22,7 +24,7 @@ const l = (
   quiz: QuizQuestion[],
 ): Lesson => ({ pathwayId, id, title, englishTitle, duration, summary, sections: [first, second], quiz });
 
-export const pathways: Pathway[] = [
+const everydayPathways: Pathway[] = [
   { id: 'foundations', title: 'مبانی حقوق انگلستان و ولز', englishTitle: 'Foundations of English Law', description: 'منابع قانون، ساختار دادگاه‌ها و تفاوت پرونده‌های مدنی و کیفری.', icon: 'book-open', color: '#4B3DB8', softColor: '#ECE9FF', level: 'مقدماتی', lessonIds: ['sources-of-law', 'court-hierarchy', 'civil-or-criminal'] },
   { id: 'housing', title: 'اجاره‌نشینی و مسکن', englishTitle: 'Housing & Tenancy', description: 'قرارداد اجاره، ودیعه، تعمیرات و مسیر قانونی پایان اجاره.', icon: 'home', color: '#A65D00', softColor: '#FFF1D6', level: 'کاربردی', lessonIds: ['tenancy-agreement', 'tenancy-deposit', 'repairs-and-eviction'] },
   { id: 'employment', title: 'حقوق کار و محیط کار', englishTitle: 'Employment Law', description: 'شرایط استخدام، تبعیض و اصول پایه اخراج منصفانه.', icon: 'briefcase', color: '#A83454', softColor: '#FCE8EE', level: 'مقدماتی', lessonIds: ['employment-status', 'workplace-discrimination', 'fair-dismissal'] },
@@ -30,7 +32,7 @@ export const pathways: Pathway[] = [
   { id: 'police', title: 'برخورد با پلیس', englishTitle: 'Police Encounters', description: 'توقف و بازرسی، بازداشت و حقوق فرد در مصاحبه پلیس.', icon: 'shield', color: '#28598F', softColor: '#E4EFFD', level: 'کاربردی', lessonIds: ['stop-and-search', 'arrest-rights', 'police-interview'] },
 ];
 
-export const lessons: Lesson[] = [
+const everydayLessons: Lesson[] = [
   l('foundations', 'sources-of-law', 'قانون از کجا می‌آید؟', 'Sources of law', 7, 'با مهم‌ترین منابع قانون و نقش هرکدام آشنا شوید.',
     { title: 'قانون‌گذاری پارلمان', body: 'پارلمان قوانین اصلی را تصویب می‌کند. مقررات تکمیلی و تصمیم دادگاه‌ها نیز بر شیوه اجرای آن اثر می‌گذارند.', callout: 'دادگاه متن قانون را در پرونده واقعی تفسیر و اجرا می‌کند.', termFa: 'قانون موضوعه', termEn: 'Legislation' },
     { title: 'قانون ساخته‌شده در دادگاه‌ها', body: 'اصول حقوقی دادگاه‌های بالاتر می‌توانند برای دادگاه‌های پایین‌تر الزام‌آور باشند. جایگاه دادگاه و استدلال ضروری رأی مهم است.', termFa: 'رأی سابق قضایی', termEn: 'Judicial precedent' },
@@ -93,6 +95,8 @@ export const lessons: Lesson[] = [
     [q('interview-1', 'caution درباره چیست؟', ['حق سکوت و پیامد آن', 'جریمه قطعی', 'زمان دادگاه'], 0, 'caution حق سکوت را توضیح می‌دهد.'), q('interview-2', 'پیش از پاسخ چه کنید؟', ['مشاوره حقوقی بگیرید', 'حدس بزنید', 'بدون خواندن امضا کنید'], 0, 'راهبرد به پرونده بستگی دارد.')]),
 ];
 
+export const pathways: Pathway[] = [...sqePathways, ...everydayPathways];
+export const lessons: Lesson[] = [...sqeLessons, ...everydayLessons];
 export const lessonById = Object.fromEntries(lessons.map((item) => [item.id, item])) as Record<string, Lesson>;
 export const pathwayById = Object.fromEntries(pathways.map((item) => [item.id, item])) as Record<string, Pathway>;
 export const glossary = lessons.flatMap((item) => item.sections).map((section) => ({ fa: section.termFa, en: section.termEn })).filter((item, index, all) => all.findIndex((candidate) => candidate.en === item.en) === index);

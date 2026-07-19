@@ -9,6 +9,8 @@ export type ReviewRecord = {
   strength: number;
 };
 
+export type TestAttempt = { id: string; stage: 'FLK1' | 'FLK2'; mode: 'quick' | 'diagnostic' | 'mock'; score: number; correct: number; total: number; completedAt: string; durationSeconds: number };
+
 export type LearnerState = {
   hydrated: boolean;
   onboarded: boolean;
@@ -22,6 +24,7 @@ export type LearnerState = {
   activeDays: string[];
   audioEnabled: boolean;
   persianFirst: boolean;
+  testHistory: TestAttempt[];
 };
 
 type SettingsPatch = Partial<Pick<LearnerState, 'name' | 'dailyGoal' | 'audioEnabled' | 'persianFirst'>>;
@@ -33,6 +36,7 @@ type StoreValue = {
   reviewAnswer: (questionId: string, correct: boolean) => void;
   toggleSaved: (lessonId: string) => void;
   updateSettings: (patch: SettingsPatch) => void;
+  recordTestAttempt: (attempt: Omit<TestAttempt, 'id' | 'completedAt'>) => void;
   resetProgress: () => Promise<void>;
   streak: number;
   completedToday: number;
@@ -53,6 +57,7 @@ const initialState: LearnerState = {
   activeDays: [],
   audioEnabled: false,
   persianFirst: true,
+  testHistory: [],
 };
 
 const todayKey = () => new Date().toISOString().slice(0, 10);
@@ -173,6 +178,10 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
     setState((current) => ({ ...current, ...patch }));
   }, []);
 
+  const recordTestAttempt = useCallback((attempt: Omit<TestAttempt, 'id' | 'completedAt'>) => {
+    setState((current) => ({ ...current, testHistory: [{ ...attempt, id: Date.now().toString(), completedAt: new Date().toISOString() }, ...current.testHistory].slice(0, 50), activeDays: Array.from(new Set([...current.activeDays, todayKey()])) }));
+  }, []);
+
   const resetProgress = useCallback(async () => {
     await AsyncStorage.removeItem(STORAGE_KEY);
     setState({ ...initialState, hydrated: true });
@@ -192,11 +201,12 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
       reviewAnswer,
       toggleSaved,
       updateSettings,
+      recordTestAttempt,
       resetProgress,
       streak,
       completedToday,
     }),
-    [state, finishOnboarding, completeLesson, reviewAnswer, toggleSaved, updateSettings, resetProgress, streak, completedToday],
+    [state, finishOnboarding, completeLesson, reviewAnswer, toggleSaved, updateSettings, recordTestAttempt, resetProgress, streak, completedToday],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

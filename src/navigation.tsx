@@ -3,7 +3,7 @@ import * as Haptics from 'expo-haptics';
 import { DefaultTheme, NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator, type NativeStackNavigationProp, type NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -22,6 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ActionButton, Brand, ProgressBar } from './components';
 import { glossary, lessonById, lessons, pathwayById, pathways, type IconName, type Lesson, type Pathway, type QuizQuestion } from './curriculum';
+import { questionsForStage, stageSubjects, type SqeStage, type SqeTrack } from './sqe';
 import { useLearner } from './store';
 import { palette, radius, shadow, space, type } from './theme';
 
@@ -29,13 +30,14 @@ export type RootStackParamList = {
   Main: undefined;
   Pathway: { pathwayId: string };
   Lesson: { lessonId: string };
+  Test: { stage: SqeStage; count: number; mode: 'quick' | 'diagnostic' | 'mock' };
 };
 
 type TabParams = {
   Home: undefined;
   Learn: undefined;
   Review: undefined;
-  Search: undefined;
+  Practice: undefined;
   Profile: undefined;
 };
 
@@ -45,7 +47,7 @@ const tabInfo: Record<keyof TabParams, { label: string; icon: IconName }> = {
   Home: { label: 'خانه', icon: 'home' },
   Learn: { label: 'مسیرها', icon: 'book-open' },
   Review: { label: 'مرور', icon: 'refresh-cw' },
-  Search: { label: 'جست‌وجو', icon: 'search' },
+  Practice: { label: 'آزمون', icon: 'edit-3' },
   Profile: { label: 'حساب', icon: 'user' },
 };
 
@@ -59,6 +61,7 @@ export function HaghDanApp() {
         <Root.Screen name="Main" component={MainTabs} />
         <Root.Screen name="Pathway" component={PathwayScreen} />
         <Root.Screen name="Lesson" component={LessonScreen} />
+        <Root.Screen name="Test" component={TestScreen} />
       </Root.Navigator>
     </NavigationContainer>
   );
@@ -87,7 +90,7 @@ function MainTabs() {
       <Tabs.Screen name="Home" component={Home} />
       <Tabs.Screen name="Learn" component={Learn} />
       <Tabs.Screen name="Review" component={Review} />
-      <Tabs.Screen name="Search" component={Search} />
+      <Tabs.Screen name="Practice" component={Practice} />
       <Tabs.Screen name="Profile" component={Profile} />
     </Tabs.Navigator>
   );
@@ -151,11 +154,28 @@ function Home() {
 function Learn() {
   const nav = useRootNav();
   const { state } = useLearner();
+  const [track, setTrack] = useState<SqeTrack>('FLK1');
+  const [query, setQuery] = useState('');
+  const tracks: { key: SqeTrack; label: string }[] = [
+    { key: 'FLK1', label: 'FLK1' }, { key: 'FLK2', label: 'FLK2' },
+    { key: 'SQE2', label: 'SQE2' }, { key: 'EVERYDAY', label: 'حقوق روزمره' },
+  ];
+  const source = track === 'EVERYDAY' ? pathways.filter((item) => !item.track) : stageSubjects(track);
+  const key = query.trim().toLocaleLowerCase();
+  const visible = key ? source.filter((item) => [item.title, item.englishTitle, item.description].some((value) => value.toLocaleLowerCase().includes(key))) : source;
+  const unitCount = source.reduce((sum, item) => sum + item.lessonIds.length, 0);
   return (
     <Page>
-      <Header eyebrow="کتابخانه" title="مسیرهای یادگیری" subtitle="از پایه شروع کنید یا مستقیم سراغ موضوع مورد نیازتان بروید." />
-      <View style={s.library}><View style={s.iconHero}><Feather name="map" size={25} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>۵ مسیر · ۱۵ درس کاربردی</Text><Text style={s.hint}>{state.completedLessons.length} درس تکمیل شده؛ همه درس‌ها بدون قفل در دسترس‌اند.</Text></View></View>
-      <View style={s.grid}>{pathways.map((item) => <PathCard key={item.id} item={item} onPress={() => nav.navigate('Pathway', { pathwayId: item.id })} />)}</View>
+      <Header eyebrow="برنامه کامل SQE" title="یادگیری ساختاریافته" subtitle="FLK1 و FLK2 برای دانش کاربردی؛ SQE2 برای شش مهارت عملی." />
+      <View style={s.specBanner}>
+        <View style={s.specIcon}><Feather name="award" size={24} color={palette.white} /></View>
+        <View style={s.flexEnd}><Text style={s.specTitle}>منطبق با ساختار SRA · نسخه ۲۰۲۵/۲۶</Text><Text style={s.specText}>۱۴ بخش SQE1 · ۶ مهارت SQE2 · اخلاق حرفه‌ای در سراسر برنامه</Text></View>
+      </View>
+      <View style={s.trackTabs}>{tracks.map((item) => <Pressable key={item.key} accessibilityRole="tab" accessibilityState={{ selected: track === item.key }} onPress={() => { setTrack(item.key); setQuery(''); }} style={({ pressed }) => [s.trackTab, track === item.key && s.trackTabActive, pressed && s.pressed]}><Text style={[s.trackTabText, track === item.key && s.trackTabTextActive]}>{item.label}</Text></Pressable>)}</View>
+      <View style={s.searchBox}><Feather name="search" size={20} color={palette.muted} /><TextInput value={query} onChangeText={setQuery} placeholder="جست‌وجوی موضوع یا اصطلاح…" placeholderTextColor={palette.muted} style={s.searchInput} textAlign="right" accessibilityLabel="جست‌وجوی سرفصل‌ها" /></View>
+      <View style={s.library}><View style={s.iconHero}><Feather name={track === 'SQE2' ? 'target' : 'book-open'} size={25} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>{source.length} بخش · {unitCount} واحد یادگیری</Text><Text style={s.hint}>{state.completedLessons.filter((id) => source.some((path) => path.lessonIds.includes(id))).length} واحد تکمیل شده؛ همه واحدها بدون قفل در دسترس‌اند.</Text></View></View>
+      <View style={s.grid}>{visible.map((item) => <PathCard key={item.id} item={item} onPress={() => nav.navigate('Pathway', { pathwayId: item.id })} />)}</View>
+      {!visible.length ? <Empty icon="search" title="نتیجه‌ای در این بخش نبود" body="عبارت دیگری را امتحان کنید یا بخش دیگری را انتخاب کنید." /> : null}
       <Notice />
     </Page>
   );
@@ -262,6 +282,74 @@ function QuizCard({ question, selected, revealed, onSelect }: { question: QuizQu
   })}</View>{revealed ? <View style={[s.feedback, isCorrect ? s.feedbackGood : s.feedbackBad]}><Feather name={isCorrect ? 'check-circle' : 'info'} size={20} color={isCorrect ? palette.success : palette.rose} /><View style={s.flexEnd}><Text style={s.smallStrong}>{isCorrect ? 'درست بود' : 'دوباره مرور کنیم'}</Text><Text style={s.hint}>{question.explanation}</Text></View></View> : null}</View>;
 }
 
+type TestProps = NativeStackScreenProps<RootStackParamList, 'Test'>;
+function TestScreen({ route, navigation }: TestProps) {
+  const { stage, count, mode } = route.params;
+  const { recordTestAttempt } = useLearner();
+  const pool = questionsForStage(stage);
+  const questions = useMemo(() => [...pool].sort(() => Math.random() - 0.5).slice(0, Math.min(count, pool.length)), [stage, count]);
+  const duration = mode === 'mock' ? 153 * 60 : mode === 'diagnostic' ? 45 * 60 : 15 * 60;
+  const [remaining, setRemaining] = useState(duration);
+  const [index, setIndex] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [flagged, setFlagged] = useState<string[]>([]);
+  const [finished, setFinished] = useState(false);
+  const [score, setScore] = useState(0);
+  const [correct, setCorrect] = useState(0);
+  const [startedAt] = useState(Date.now);
+  const question = questions[index]!;
+  const answered = Object.keys(answers).length;
+
+  const finishTest = () => {
+    if (finished) return;
+    const right = questions.filter((item) => answers[item.id] === item.correctIndex).length;
+    const percent = Math.round((right / questions.length) * 100);
+    setCorrect(right); setScore(percent); setFinished(true);
+    recordTestAttempt({ stage, mode, score: percent, correct: right, total: questions.length, durationSeconds: Math.round((Date.now() - startedAt) / 1000) });
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  useEffect(() => {
+    if (finished) return;
+    const timer = setInterval(() => setRemaining((value) => Math.max(0, value - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [finished]);
+
+  useEffect(() => {
+    if (remaining === 0 && !finished) finishTest();
+  }, [remaining, finished]);
+
+  const submit = () => {
+    if (answered < questions.length) {
+      Alert.alert('آزمون را تمام می‌کنید؟', `${questions.length - answered} سؤال بدون پاسخ است.`, [{ text: 'ادامه آزمون', style: 'cancel' }, { text: 'ثبت نتیجه', onPress: finishTest }]);
+    } else finishTest();
+  };
+  const toggleFlag = () => setFlagged((items) => items.includes(question.id) ? items.filter((id) => id !== question.id) : [...items, question.id]);
+  const time = `${Math.floor(remaining / 60).toString().padStart(2,'0')}:${(remaining % 60).toString().padStart(2,'0')}`;
+  const modeTitle = mode === 'mock' ? 'نشست شبیه‌ساز' : mode === 'diagnostic' ? 'آزمون تشخیصی' : 'تمرین سریع';
+
+  if (finished) {
+    const breakdown = stageSubjects(stage).map((subject) => {
+      const subjectQuestions = questions.filter((item) => item.subjectId === subject.id);
+      const subjectCorrect = subjectQuestions.filter((item) => answers[item.id] === item.correctIndex).length;
+      return { subject, total: subjectQuestions.length, correct: subjectCorrect, score: subjectQuestions.length ? Math.round(subjectCorrect / subjectQuestions.length * 100) : 0 };
+    }).filter((item) => item.total);
+    return <SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.testPage}><TopBar onBack={navigation.goBack} /><View style={s.result}><View style={[s.resultIcon,{backgroundColor:score>=70?palette.success:palette.saffron}]}><Feather name={score>=70?'award':'trending-up'} size={38} color={palette.white} /></View><Text style={s.eyebrow}>نتیجه {stage}</Text><Text style={s.pathHeroTitle}>{modeTitle} تکمیل شد</Text><Text style={s.score}>{score}٪</Text><Text style={s.centerBody}>{correct} پاسخ درست از {questions.length} · نتیجه در تاریخچه محلی ذخیره شد.</Text></View><SectionTitle title="عملکرد بر اساس بخش" /><View style={s.list}>{breakdown.map(({subject,total,correct:subjectCorrect,score:subjectScore})=><View key={subject.id} style={s.breakdownRow}><View style={s.flexEnd}><Text style={s.modeTitle}>{subject.title}</Text><Text style={s.hint}>{subjectCorrect} از {total} درست</Text></View><View style={s.breakdownScore}><Text style={s.smallStrong}>{subjectScore}٪</Text></View></View>)}</View><ActionButton label="بازگشت به آزمون‌ها" icon="arrow-left" onPress={navigation.goBack} fullWidth /><Notice /></ScrollView></SafeAreaView>;
+  }
+
+  return <SafeAreaView style={s.safe}>
+    <View style={s.testTop}><RoundIcon icon="x" label="خروج از آزمون" onPress={navigation.goBack} /><View style={s.testHeading}><Text style={s.smallStrong}>{stage} · {modeTitle}</Text><Text style={s.hint}>سؤال {index + 1} از {questions.length}</Text></View><View style={[s.timer,remaining<300&&s.timerUrgent]}><Feather name="clock" size={16} color={remaining<300?palette.rose:palette.primary} /><Text style={[s.timerText,remaining<300&&{color:palette.rose}]}>{time}</Text></View></View>
+    <ProgressBar value={((index + 1) / questions.length) * 100} />
+    <ScrollView contentContainerStyle={s.testPage}>
+      <View style={s.questionMeta}><Text style={s.hint}>{pathwayById[question.subjectId]?.title}</Text><Pressable accessibilityRole="button" accessibilityState={{selected:flagged.includes(question.id)}} onPress={toggleFlag} style={({pressed})=>[s.flagButton,flagged.includes(question.id)&&s.flagActive,pressed&&s.pressed]}><Feather name="flag" size={17} color={flagged.includes(question.id)?palette.saffron:palette.muted} /><Text style={s.hint}>{flagged.includes(question.id)?'علامت‌گذاری شد':'علامت‌گذاری'}</Text></Pressable></View>
+      <Text style={s.quizTitle}>{question.prompt}</Text>
+      <View style={s.list}>{question.answers.map((answer,answerIndex)=>{const chosen=answers[question.id]===answerIndex;return <Pressable key={answerIndex} accessibilityRole="radio" accessibilityState={{checked:chosen}} onPress={()=>setAnswers((items)=>({...items,[question.id]:answerIndex}))} style={({pressed})=>[s.answer,chosen&&s.answerChosen,pressed&&s.pressed]}><View style={[s.radio,chosen&&s.radioChosen]}>{chosen?<Feather name="check" size={13} color={palette.white}/>:null}</View><Text style={s.answerText}>{answer}</Text></Pressable>})}</View>
+      <View style={s.questionNav}><ActionButton label="قبلی" icon="arrow-right" variant="quiet" onPress={()=>setIndex(Math.max(0,index-1))} disabled={index===0} /><ActionButton label={index===questions.length-1?'ثبت آزمون':'بعدی'} icon="arrow-left" onPress={()=>index===questions.length-1?submit():setIndex(index+1)} /></View>
+      <Text style={s.centerBody}>{answered} پاسخ داده شده · {flagged.length} علامت‌گذاری شده</Text>
+    </ScrollView>
+  </SafeAreaView>;
+}
+
 function Review() {
   const { state, reviewAnswer } = useLearner();
   const [selected, setSelected] = useState<number | null>(null);
@@ -279,13 +367,26 @@ function Review() {
   return <Page><Header eyebrow="حافظه فعال" title="مرور فاصله‌دار" subtitle="پرسش‌ها در زمان مناسب برای تثبیت حافظه برمی‌گردند." /><View style={s.stats}><Stat icon="inbox" value={String(due.length)} label="اکنون آماده" color={palette.primary} soft={palette.primarySoft} /><Stat icon="calendar" value={String(state.reviewQueue.length - due.length)} label="برای بعد" color={palette.teal} soft={palette.tealSoft} /></View>{question ? <View style={s.list}><Text style={s.hint}>{lesson?.title}</Text><QuizCard question={question} selected={selected} revealed={revealed} onSelect={setSelected} /><ActionButton label={revealed ? 'ثبت و ادامه' : 'بررسی پاسخ'} icon="arrow-left" onPress={advance} disabled={selected === null} fullWidth /></View> : <Empty icon="check-circle" title="مرور امروز تمام شد" body={state.reviewQueue.length ? 'پرسش‌های بعدی طبق برنامه ظاهر می‌شوند.' : 'پس از اولین درس، پرسش‌ها خودکار به اینجا اضافه می‌شوند.'} />}<Notice /></Page>;
 }
 
-function Search() {
+function Practice() {
   const nav = useRootNav();
-  const [query, setQuery] = useState('');
-  const key = query.trim().toLocaleLowerCase();
-  const foundLessons = key ? lessons.filter((item) => [item.title, item.englishTitle, item.summary].some((value) => value.toLocaleLowerCase().includes(key))) : [];
-  const foundTerms = key ? glossary.filter((item) => item.fa.toLocaleLowerCase().includes(key) || item.en.toLocaleLowerCase().includes(key)) : [];
-  return <Page><Header eyebrow="دانش‌نامه" title="جست‌وجوی حقوقی" subtitle="موضوع فارسی یا اصطلاح انگلیسی را جست‌وجو کنید." /><View style={s.searchBox}><Feather name="search" size={20} color={palette.muted} /><TextInput value={query} onChangeText={setQuery} placeholder="مثلاً ودیعه یا Appeal" placeholderTextColor={palette.muted} style={s.searchInput} textAlign="right" accessibilityLabel="جست‌وجو" /></View>{!key ? <><SectionTitle title="واژه‌های کلیدی" /><View style={s.glossary}>{glossary.slice(0, 15).map((item) => <View key={item.en} style={s.glossaryCard}><Text style={s.cardTitle}>{item.fa}</Text><Text style={s.englishSmall}>{item.en}</Text></View>)}</View></> : <View style={s.list}><Text style={s.hint}>{foundLessons.length + foundTerms.length} نتیجه</Text>{foundLessons.map((item) => <Pressable key={item.id} onPress={() => nav.navigate('Lesson', { lessonId: item.id })} style={({ pressed }) => [s.searchResult, pressed && s.pressed]}><View style={s.iconSmall}><Feather name="file-text" size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>{item.title}</Text><Text style={s.englishSmall}>{item.englishTitle}</Text></View><Feather name="chevron-left" size={20} color={palette.muted} /></Pressable>)}{foundTerms.map((item) => <View key={item.en} style={s.searchResult}><View style={s.iconSmall}><Feather name="book" size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>{item.fa}</Text><Text style={s.englishSmall}>{item.en}</Text></View></View>)}{!foundLessons.length && !foundTerms.length ? <Empty icon="search" title="نتیجه‌ای پیدا نشد" body="املای دیگری را امتحان کنید." /> : null}</View>}<Notice /></Page>;
+  const { state } = useLearner();
+  const modes: { mode: 'quick' | 'diagnostic' | 'mock'; count: number; title: string; subtitle: string; icon: IconName }[] = [
+    { mode: 'quick', count: 10, title: 'تمرین سریع', subtitle: '۱۰ سؤال · حدود ۱۵ دقیقه', icon: 'zap' },
+    { mode: 'diagnostic', count: 30, title: 'آزمون تشخیصی', subtitle: '۳۰ سؤال · تحلیل سطح آمادگی', icon: 'activity' },
+    { mode: 'mock', count: 90, title: 'شبیه‌ساز یک نشست کامل', subtitle: '۹۰ سؤال · زمان رسمی ۱۵۳ دقیقه', icon: 'clock' },
+  ];
+  const best = (stage: SqeStage) => {
+    const scores = state.testHistory.filter((item) => item.stage === stage).map((item) => item.score);
+    return scores.length ? Math.max(...scores) + '٪' : '—';
+  };
+  return <Page>
+    <Header eyebrow="بانک تمرین SQE1" title="تمرین و آزمون" subtitle="پرسش‌های پنج‌گزینه‌ای single best answer با زمان‌سنج، علامت‌گذاری و ذخیره نتیجه." />
+    <View style={s.examGrid}>{(['FLK1','FLK2'] as SqeStage[]).map((stage) => <View key={stage} style={s.examPanel}><View style={s.between}><View style={[s.pathIcon,{backgroundColor:stage==='FLK1'?palette.primarySoft:palette.tealSoft}]}><Feather name={stage==='FLK1'?'briefcase':'home'} size={23} color={stage==='FLK1'?palette.primary:palette.teal} /></View><View style={s.flexEnd}><Text style={s.examStage}>{stage}</Text><Text style={s.hint}>{stageSubjects(stage).length} بخش · بهترین نتیجه {best(stage)}</Text></View></View><View style={s.list}>{modes.map((item) => <Pressable key={item.mode} accessibilityRole="button" onPress={() => nav.navigate('Test',{stage,count:item.count,mode:item.mode})} style={({pressed})=>[s.modeRow,pressed&&s.pressed]}><View style={s.modeIcon}><Feather name={item.icon} size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.modeTitle}>{item.title}</Text><Text style={s.hint}>{item.subtitle}</Text></View><Feather name="chevron-left" size={20} color={palette.muted} /></Pressable>)}</View></View>)}</View>
+    <View style={s.examNote}><Feather name="info" size={20} color={palette.primary} /><View style={s.flexEnd}><Text style={s.smallStrong}>فرمت واقعی SQE1</Text><Text style={s.hint}>هر FLK در آزمون رسمی ۱۸۰ سؤال دارد و در دو نشست ۹۰ سؤالی برگزار می‌شود. شبیه‌ساز این اپ یک نشست ۹۰ سؤالی را تمرین می‌کند.</Text></View></View>
+    <SectionTitle title="نتایج اخیر" />
+    {state.testHistory.length ? <View style={s.list}>{state.testHistory.slice(0,6).map((item)=><View key={item.id} style={s.historyRow}><View style={[s.scoreBadge,{backgroundColor:item.score>=70?palette.tealSoft:palette.saffronSoft}]}><Text style={s.scoreBadgeText}>{item.score}٪</Text></View><View style={s.flexEnd}><Text style={s.cardTitle}>{item.stage} · {item.total} سؤال</Text><Text style={s.hint}>{new Date(item.completedAt).toLocaleDateString('fa-IR')} · {item.correct} پاسخ درست</Text></View></View>)}</View>:<Empty icon="bar-chart-2" title="هنوز نتیجه‌ای ثبت نشده" body="یک تمرین سریع شروع کنید؛ نتیجه و تاریخچه روی همین دستگاه ذخیره می‌شود." />}
+    <Notice />
+  </Page>;
 }
 
 function Profile() {
@@ -433,4 +534,35 @@ const s = StyleSheet.create({
   dangerText: { color: palette.rose, fontSize: 13, fontWeight: '900', writingDirection: 'rtl' },
   notice: { flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 8, padding: 13, borderRadius: radius.md, backgroundColor: palette.surfaceMuted },
   noticeText: { flex: 1, color: palette.muted, fontSize: 10, lineHeight: 18, textAlign: 'right', writingDirection: 'rtl' },
+  specBanner: { flexDirection: 'row-reverse', alignItems: 'center', gap: 14, padding: 18, borderRadius: radius.lg, backgroundColor: palette.primaryDark },
+  specIcon: { width: 50, height: 50, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.primary },
+  specTitle: { color: palette.white, fontSize: 15, lineHeight: 24, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
+  specText: { color: '#D7D1FF', fontSize: 11, lineHeight: 19, textAlign: 'right', writingDirection: 'rtl', marginTop: 3 },
+  trackTabs: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, padding: 6, borderRadius: radius.lg, backgroundColor: palette.surfaceMuted },
+  trackTab: { minHeight: 46, flexGrow: 1, minWidth: 92, paddingHorizontal: 15, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md },
+  trackTabActive: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line, ...shadow },
+  trackTabText: { color: palette.muted, fontSize: 12, fontWeight: '800', writingDirection: 'rtl' },
+  trackTabTextActive: { color: palette.primary },
+  examGrid: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 15 },
+  examPanel: { flexGrow: 1, flexBasis: 360, minWidth: 280, gap: 18, padding: 20, borderWidth: 1, borderColor: palette.line, borderRadius: radius.xl, backgroundColor: palette.surface, ...shadow },
+  examStage: { color: palette.ink, fontSize: 23, fontFamily: type.latinBold },
+  modeRow: { minHeight: 76, flexDirection: 'row-reverse', alignItems: 'center', gap: 11, padding: 12, borderRadius: radius.md, backgroundColor: palette.background, borderWidth: 1, borderColor: palette.line },
+  modeIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.primarySoft },
+  modeTitle: { color: palette.ink, fontSize: 14, lineHeight: 22, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
+  examNote: { flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 11, padding: 16, borderRadius: radius.lg, backgroundColor: palette.primarySoft },
+  historyRow: { minHeight: 76, flexDirection: 'row-reverse', alignItems: 'center', gap: 13, padding: 14, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.surface },
+  scoreBadge: { width: 56, height: 56, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  scoreBadgeText: { color: palette.ink, fontSize: 15, fontFamily: type.latinBold },
+  testPage: { flexGrow: 1, width: '100%', maxWidth: 820, alignSelf: 'center', padding: 20, paddingBottom: 70, gap: 20 },
+  testTop: { minHeight: 76, flexDirection: 'row-reverse', alignItems: 'center', gap: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: palette.line, backgroundColor: palette.surface },
+  testHeading: { flex: 1, alignItems: 'flex-end' },
+  timer: { minWidth: 86, minHeight: 44, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: radius.md, backgroundColor: palette.primarySoft },
+  timerUrgent: { backgroundColor: palette.roseSoft },
+  timerText: { color: palette.primary, fontSize: 14, fontFamily: type.latinBold, fontVariant: ['tabular-nums'] },
+  questionMeta: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  flagButton: { minHeight: 44, paddingHorizontal: 12, flexDirection: 'row-reverse', alignItems: 'center', gap: 7, borderRadius: radius.md, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.surface },
+  flagActive: { borderColor: palette.saffron, backgroundColor: palette.saffronSoft },
+  questionNav: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 8 },
+  breakdownRow: { minHeight: 74, flexDirection: 'row-reverse', alignItems: 'center', gap: 12, padding: 14, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.surface },
+  breakdownScore: { minWidth: 58, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: palette.primarySoft },
 });

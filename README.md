@@ -1,45 +1,59 @@
 # HaghDān · حق‌دان
 
-A Persian-first, cross-platform microlearning app for understanding the law of England and Wales. Built with Expo and React Native for iOS, Android, tablets, and the web.
+A Persian-first, offline-capable learning app for understanding the law of England and Wales. It runs on Android, iOS, tablets, and the web from one Expo/React Native codebase.
 
-## Product concept
+## What works
 
-HaghDān turns intimidating legal concepts into short bilingual learning sessions. The interface is right-to-left by default, while important English legal terms stay visible to help Persian speakers build practical vocabulary.
+- First-run onboarding with a learner name and daily study goal
+- Five complete learning pathways with 15 bilingual lessons
+- Section-by-section lessons, scored quizzes, explanations, and haptic feedback
+- Durable on-device progress, quiz scores, bookmarks, streaks, and daily goals
+- Adaptive spaced-repetition queue for correct and incorrect answers
+- Persian and English search across lessons and the legal glossary
+- Responsive bottom navigation on phones and sidebar navigation on desktop
+- Accessible controls, RTL reading layouts, safe-area support, and legal disclaimers
+- Resettable local profile and settings
 
-The first interactive prototype includes:
+Progress is stored locally with AsyncStorage and works without an account. Cloud accounts and cross-device sync are intentionally not represented as complete features.
 
-- A personalised daily learning dashboard
-- Map-style pathways and lesson progression
-- A bilingual lesson about court hierarchy and judicial precedent
-- Active-recall questions with answer feedback
-- A spaced-review queue and memory-strength indicators
-- Streak, mastery, and knowledge-bank progress
-- Responsive mobile, tablet, and desktop navigation
-- Educational-content disclaimers throughout
+## Stable Expo baseline
 
-The current lesson content is illustrative and must be legally reviewed before public release. HaghDān provides education, not legal advice.
+The project is pinned to Expo SDK 54.0.36, React Native 0.81.5, React 19.1.0, and Node 20.19.4. All native dependencies are exact-version pinned and pass Expo's SDK compatibility check.
 
-## Run locally
+Expo Go must match SDK 54. On Android, use the matching build from:
 
-```bash
-npm install
+https://expo.dev/go?device=true&platform=android&sdkVersion=54
+
+On iPhone, update Expo Go from the App Store. Apple does not allow installing arbitrary older Expo Go versions on a physical iPhone; use a development build if the current store client no longer supports SDK 54.
+
+## Run on a phone
+
+```powershell
+nvm use 20.19.4
+npm ci
+npm start
+```
+
+Scan the QR code in the matching Expo Go app. The phone and computer must be able to reach each other on the same network.
+
+## Run on the web
+
+```powershell
 npm run web
 ```
 
-From the Expo terminal, press `a` for Android or scan the QR code with a compatible Expo Go app. On macOS, press `i` for iOS.
+Open http://localhost:8084.
 
 ## Validation
 
-```bash
+```powershell
 npm run typecheck
+node scripts/run-expo.cjs install --check
 npm run export:web
 ```
 
-## Next production steps
+## Product boundary
 
-- Add authentication and encrypted cloud progress sync
-- Replace sample pathways with solicitor-reviewed curricula
-- Add a content-management and legal-review workflow
-- Add audio narration and offline lesson downloads
-- Add adaptive spaced repetition and durable local persistence
-- Add analytics consent, privacy documents, and store assets
+The app is now a functional offline-first MVP, not only a visual demo. A public commercial release still needs solicitor review of every lesson, privacy and terms documents, store assets, analytics consent decisions, and a production authentication/sync service if cross-device accounts are required.
+
+The content is general legal education, not legal advice. Law and procedural deadlines can change.

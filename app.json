@@ -2,17 +2,21 @@
   "expo": {
     "name": "حق‌دان | HaghDān",
     "slug": "haghdan-law-learning",
-    "version": "0.1.0",
+    "scheme": "haghdan",
+    "version": "1.0.0",
     "orientation": "default",
     "userInterfaceStyle": "light",
+    "newArchEnabled": true,
     "backgroundColor": "#F7F6FC",
     "primaryColor": "#4B3DB8",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.haghdan.learning"
+      "bundleIdentifier": "com.haghdan.learning",
+      "buildNumber": "1"
     },
     "android": {
       "package": "com.haghdan.learning",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#4B3DB8"
       }

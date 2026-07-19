@@ -14,6 +14,12 @@ const app = JSON.parse(fs.readFileSync('app.json', 'utf8')).expo;
 if (app.ios?.bundleIdentifier === 'com.haghdan.learning' && app.android?.package === 'com.haghdan.learning') pass('Native identifiers configured');
 else fail('Native identifiers are missing or inconsistent');
 
+const themeSource = fs.readFileSync('src/theme.ts', 'utf8');
+const storeSource = fs.readFileSync('src/store.tsx', 'utf8');
+const navigationSource = fs.readFileSync('src/navigation.tsx', 'utf8');
+if (app.userInterfaceStyle === 'automatic' && themeSource.includes('darkPalette') && storeSource.includes('themeMode') && navigationSource.includes('ThemePicker')) pass('Persisted system, light and dark appearance modes configured');
+else fail('Complete appearance-mode configuration is missing');
+
 ['assets/icon.png','assets/adaptive-icon.png','assets/splash-icon.png','assets/favicon.png','docs/PRIVACY_POLICY.md','docs/TERMS_AND_DISCLAIMER.md','docs/EDITORIAL_POLICY.md','eas.json','PUBLISHING.md'].forEach(path => requireFile(path, path.endsWith('.png') ? 1000 : 100));
 
 const curriculum = fs.readFileSync('src/sqe.ts', 'utf8');

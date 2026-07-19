@@ -23,8 +23,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActionButton, Brand, ProgressBar } from './components';
 import { glossary, lessonById, lessons, pathwayById, pathways, type IconName, type Lesson, type Pathway, type QuizQuestion } from './curriculum';
 import { questionsForStage, sqeTotals, stageSubjects, type SqeStage, type SqeTrack } from './sqe';
-import { useLearner } from './store';
-import { palette, radius, shadow, space, type } from './theme';
+import { useLearner, type ThemeMode } from './store';
+import { createShadow, lightPalette, radius, space, themedAccentColor, themedSoftColor, type, useAppTheme, type AppPalette } from './theme';
 
 export type RootStackParamList = {
   Main: undefined;
@@ -51,12 +51,20 @@ const tabInfo: Record<keyof TabParams, { label: string; icon: IconName }> = {
   Profile: { label: 'حساب', icon: 'user' },
 };
 
+let palette = lightPalette;
+let darkMode = false;
+let s: ReturnType<typeof createStyles>;
+
 export function HaghDanApp() {
   const { state } = useLearner();
+  const theme = useAppTheme();
+  palette = theme.palette;
+  darkMode = theme.isDark;
+  s = useMemo(() => createStyles(theme.palette), [theme.palette]);
   if (!state.hydrated) return <Loading />;
   if (!state.onboarded) return <Onboarding />;
   return (
-    <NavigationContainer theme={{ ...DefaultTheme, colors: { ...DefaultTheme.colors, primary: palette.primary, background: palette.background, card: palette.surface, text: palette.ink, border: palette.line } }}>
+    <NavigationContainer theme={{ ...DefaultTheme, dark: darkMode, colors: { ...DefaultTheme.colors, primary: palette.primary, background: palette.background, card: palette.surface, text: palette.ink, border: palette.line } }}>
       <Root.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: palette.background } }}>
         <Root.Screen name="Main" component={MainTabs} />
         <Root.Screen name="Pathway" component={PathwayScreen} />
@@ -79,6 +87,7 @@ function MainTabs() {
       headerShown: false,
       tabBarPosition: desktop ? 'left' : 'bottom',
       tabBarActiveTintColor: palette.primary,
+      tabBarActiveBackgroundColor: desktop ? palette.primarySoft : 'transparent',
       tabBarInactiveTintColor: palette.muted,
       tabBarHideOnKeyboard: true,
       tabBarLabel: tabInfo[route.name].label,
@@ -143,7 +152,7 @@ function Home() {
         </View>
         <View style={s.goalCard}><Feather name="book-open" size={40} color={palette.white} /><Text style={s.goalBig}>{completedToday}/{state.dailyGoal}</Text><Text style={s.goalCaption}>هدف امروز</Text></View>
       </View>
-      <View style={s.stats}><Stat icon="award" value={mastery + '٪'} label="پیشرفت کل" color={palette.primary} soft={palette.primarySoft} /><Stat icon="check-circle" value={String(state.completedLessons.length)} label="درس کامل" color={palette.teal} soft={palette.tealSoft} /><Stat icon="refresh-cw" value={String(due)} label="مرور آماده" color={palette.rose} soft={palette.roseSoft} /><Stat icon="activity" value={String(streak)} label="روز پیوسته" color="#8A5900" soft={palette.saffronSoft} /></View>
+      <View style={s.stats}><Stat icon="award" value={mastery + '٪'} label="پیشرفت کل" color={palette.primary} soft={palette.primarySoft} /><Stat icon="check-circle" value={String(state.completedLessons.length)} label="درس کامل" color={palette.teal} soft={palette.tealSoft} /><Stat icon="refresh-cw" value={String(due)} label="مرور آماده" color={palette.rose} soft={palette.roseSoft} /><Stat icon="activity" value={String(streak)} label="روز پیوسته" color={palette.goldInk} soft={palette.saffronSoft} /></View>
       <SectionTitle title="مسیرهای پیشنهادی" />
       <View style={s.grid}>{pathways.slice(0, 3).map((item) => <PathCard key={item.id} item={item} onPress={() => nav.navigate('Pathway', { pathwayId: item.id })} />)}</View>
       <Notice />
@@ -188,14 +197,16 @@ function PathwayScreen({ route, navigation }: PathProps) {
   if (!item) return null;
   const complete = item.lessonIds.filter((id) => state.completedLessons.includes(id)).length;
   const percent = Math.round((complete / item.lessonIds.length) * 100);
+  const softColor = themedSoftColor(item.color, item.softColor, darkMode);
+  const accentColor = themedAccentColor(item.color, darkMode);
   return (
     <SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.detailPage}>
       <TopBar onBack={navigation.goBack} />
-      <View style={[s.pathHero, { backgroundColor: item.softColor }]}>
+      <View style={[s.pathHero, { backgroundColor: softColor }]}>
         <View style={[s.pathHeroIcon, { backgroundColor: item.color }]}><Feather name={item.icon} size={30} color={palette.white} /></View>
-        <Text style={s.pathHeroTitle}>{item.title}</Text><Text style={[s.english, { color: item.color }]}>{item.englishTitle}</Text><Text style={s.body}>{item.description}</Text>
+        <Text style={s.pathHeroTitle}>{item.title}</Text><Text style={[s.english, { color: accentColor }]}>{item.englishTitle}</Text><Text style={s.body}>{item.description}</Text>
         <View style={s.between}><Text style={s.smallStrong}>{complete} از {item.lessonIds.length} درس</Text><Text style={s.smallStrong}>{percent}٪</Text></View>
-        <ProgressBar value={percent} color={item.color} trackColor={palette.white} />
+        <ProgressBar value={percent} color={accentColor} trackColor={darkMode ? palette.line : palette.white} />
         {item.track === 'FLK1' || item.track === 'FLK2' ? <ActionButton label={`تمرین ۲۰ سؤال از ${item.title}`} icon="edit-3" variant="secondary" onPress={() => navigation.navigate('Test', { stage: item.track as SqeStage, count: 20, mode: 'diagnostic', subjectId: item.id })} /> : null}
       </View>
       <View style={s.list}>{item.lessonIds.map((id, index) => {
@@ -275,7 +286,7 @@ function LessonSection({ item, index }: { item: Lesson; index: number }) {
     <Text style={s.readingTitle}>{part.title}</Text>
     <Text style={s.readingBody}>{part.body}</Text>
     {part.bullets?.length ? <View style={s.learningList}>{part.bullets.map((bullet, bulletIndex) => <View key={bulletIndex} style={s.learningPoint}><View style={s.bulletDot} /><Text style={s.learningText}>{bullet}</Text></View>)}</View> : null}
-    {part.example ? <View style={s.exampleCard}><Feather name="briefcase" size={20} color="#795100" /><View style={s.flexEnd}><Text style={s.exampleLabel}>مثال و تمرین کاربردی</Text><Text style={s.exampleText}>{part.example}</Text></View></View> : null}
+    {part.example ? <View style={s.exampleCard}><Feather name="briefcase" size={20} color={palette.goldInk} /><View style={s.flexEnd}><Text style={s.exampleLabel}>مثال و تمرین کاربردی</Text><Text style={s.exampleText}>{part.example}</Text></View></View> : null}
     {part.checklist?.length ? <View style={s.checklistCard}><Text style={s.checklistTitle}>چک‌لیست این بخش</Text>{part.checklist.map((entry, entryIndex) => <View key={entryIndex} style={s.checkRow}><Feather name="check-square" size={18} color={palette.teal} /><Text style={s.checkText}>{entry}</Text></View>)}</View> : null}
     {part.callout ? <View style={s.callout}><Feather name="info" size={20} color={palette.primary} /><Text style={s.calloutText}>{part.callout}</Text></View> : null}
     <View style={s.term}><Text style={s.hint}>واژه کلیدی</Text><Text style={s.termFa}>{part.termFa}</Text><Text style={s.english}>{part.termEn}</Text></View>
@@ -405,9 +416,76 @@ function Profile() {
   const { state, streak, updateSettings, resetProgress } = useLearner();
   const [name, setName] = useState(state.name);
   const reset = () => Alert.alert('پاک‌کردن پیشرفت؟', 'همه درس‌ها و امتیازهای محلی حذف می‌شوند.', [{ text: 'انصراف', style: 'cancel' }, { text: 'پاک کردن', style: 'destructive', onPress: () => void resetProgress() }]);
-  return <Page><Header eyebrow="حساب محلی" title="تنظیمات یادگیری" subtitle="اطلاعات شما فقط روی همین دستگاه ذخیره می‌شود." /><View style={s.profile}><View style={s.avatar}><Feather name="user" size={30} color={palette.white} /></View><View style={s.flexEnd}><Text style={s.profileName}>{state.name}</Text><Text style={s.profileMeta}>{state.completedLessons.length} درس · {streak} روز پیوسته</Text></View></View><View style={s.settings}><Text style={s.sectionTitle}>مشخصات</Text><Text style={s.label}>نام نمایشی</Text><View style={s.nameRow}><TextInput value={name} onChangeText={setName} style={s.nameInput} textAlign="right" /><Pressable onPress={() => updateSettings({ name: name.trim() || state.name })} style={s.save}><Text style={s.saveText}>ذخیره</Text></Pressable></View><Text style={s.label}>هدف روزانه</Text><GoalPicker value={state.dailyGoal} onChange={(dailyGoal) => updateSettings({ dailyGoal })} /></View><View style={s.settings}><Text style={s.sectionTitle}>ترجیحات</Text><View style={s.settingRow}><View style={s.iconSmall}><Feather name="align-right" size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>فارسی در اولویت</Text><Text style={s.hint}>اصطلاح انگلیسی زیر عنوان باقی می‌ماند</Text></View><Switch value={state.persianFirst} onValueChange={(persianFirst) => updateSettings({ persianFirst })} trackColor={{ false: palette.line, true: palette.primarySoft }} thumbColor={state.persianFirst ? palette.primary : palette.white} /></View></View><View style={s.settings}><Text style={s.sectionTitle}>شفافیت محتوا و انتشار</Text><View style={s.settingRow}><View style={s.iconSmall}><Feather name="database" size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>نسخه محتوایی ۲۰۲۵/۲۶</Text><Text style={s.hint}>{sqeTotals.lessons} واحد SQE · {sqeTotals.practiceQuestions} پرسش تمرینی ساختاریافته</Text></View></View><View style={s.settingRow}><View style={s.iconSmall}><Feather name="lock" size={19} color={palette.teal} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>حریم خصوصی آفلاین</Text><Text style={s.hint}>بدون حساب، تبلیغ یا analytics؛ پیشرفت فقط روی دستگاه ذخیره می‌شود.</Text></View></View><View style={s.settingRow}><View style={s.iconSmall}><Feather name="alert-circle" size={19} color={palette.rose} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>محصول مستقل</Text><Text style={s.hint}>وابسته یا مورد تأیید SRA یا Kaplan SQE نیست؛ آموزش عمومی، نه مشاوره حقوقی.</Text></View></View></View><Pressable onPress={reset} style={({ pressed }) => [s.danger, pressed && s.pressed]}><Feather name="trash-2" size={18} color={palette.rose} /><Text style={s.dangerText}>پاک‌کردن داده و شروع دوباره</Text></Pressable><Notice /></Page>;
+  return (
+    <Page>
+      <Header eyebrow="حساب محلی" title="تنظیمات یادگیری" subtitle="اطلاعات شما فقط روی همین دستگاه ذخیره می‌شود." />
+      <View style={s.profile}>
+        <View style={s.avatar}><Feather name="user" size={30} color={palette.white} /></View>
+        <View style={s.flexEnd}><Text style={s.profileName}>{state.name}</Text><Text style={s.profileMeta}>{state.completedLessons.length} درس · {streak} روز پیوسته</Text></View>
+      </View>
+      <View style={s.settings}>
+        <Text style={s.sectionTitle}>مشخصات</Text>
+        <Text style={s.label}>نام نمایشی</Text>
+        <View style={s.nameRow}>
+          <TextInput value={name} onChangeText={setName} style={s.nameInput} textAlign="right" />
+          <Pressable accessibilityRole="button" accessibilityLabel="ذخیره نام" onPress={() => updateSettings({ name: name.trim() || state.name })} style={({ pressed }) => [s.save, pressed && s.pressed]}><Text style={s.saveText}>ذخیره</Text></Pressable>
+        </View>
+        <Text style={s.label}>هدف روزانه</Text>
+        <GoalPicker value={state.dailyGoal} onChange={(dailyGoal) => updateSettings({ dailyGoal })} />
+      </View>
+      <View style={s.settings}>
+        <Text style={s.sectionTitle}>ترجیحات</Text>
+        <View style={s.preferenceHeading}>
+          <Text style={s.label}>ظاهر برنامه</Text>
+          <Text style={s.hint}>روشن، تاریک یا هماهنگ با تنظیمات دستگاه</Text>
+        </View>
+        <ThemePicker value={state.themeMode} onChange={(themeMode) => updateSettings({ themeMode })} />
+        <View style={s.settingRow}>
+          <View style={s.iconSmall}><Feather name="align-right" size={19} color={palette.primary} /></View>
+          <View style={s.flexEnd}><Text style={s.cardTitle}>فارسی در اولویت</Text><Text style={s.hint}>اصطلاح انگلیسی زیر عنوان باقی می‌ماند</Text></View>
+          <Switch value={state.persianFirst} onValueChange={(persianFirst) => updateSettings({ persianFirst })} trackColor={{ false: palette.line, true: palette.primarySoft }} thumbColor={state.persianFirst ? palette.primary : palette.muted} />
+        </View>
+      </View>
+      <View style={s.settings}>
+        <Text style={s.sectionTitle}>شفافیت محتوا و انتشار</Text>
+        <View style={s.settingRow}><View style={s.iconSmall}><Feather name="database" size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>نسخه محتوایی ۲۰۲۵/۲۶</Text><Text style={s.hint}>{sqeTotals.lessons} واحد SQE · {sqeTotals.practiceQuestions} پرسش تمرینی ساختاریافته</Text></View></View>
+        <View style={s.settingRow}><View style={s.iconSmall}><Feather name="lock" size={19} color={palette.teal} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>حریم خصوصی آفلاین</Text><Text style={s.hint}>بدون حساب، تبلیغ یا analytics؛ پیشرفت فقط روی دستگاه ذخیره می‌شود.</Text></View></View>
+        <View style={s.settingRow}><View style={s.iconSmall}><Feather name="alert-circle" size={19} color={palette.rose} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>محصول مستقل</Text><Text style={s.hint}>وابسته یا مورد تأیید SRA یا Kaplan SQE نیست؛ آموزش عمومی، نه مشاوره حقوقی.</Text></View></View>
+      </View>
+      <Pressable accessibilityRole="button" accessibilityLabel="پاک‌کردن داده و شروع دوباره" onPress={reset} style={({ pressed }) => [s.danger, pressed && s.pressed]}><Feather name="trash-2" size={18} color={palette.rose} /><Text style={s.dangerText}>پاک‌کردن داده و شروع دوباره</Text></Pressable>
+      <Notice />
+    </Page>
+  );
 }
 
+function ThemePicker({ value, onChange }: { value: ThemeMode; onChange: (value: ThemeMode) => void }) {
+  const choices: Array<{ value: ThemeMode; label: string; icon: IconName }> = [
+    { value: 'system', label: 'دستگاه', icon: 'smartphone' },
+    { value: 'light', label: 'روشن', icon: 'sun' },
+    { value: 'dark', label: 'تاریک', icon: 'moon' },
+  ];
+  return (
+    <View style={s.themePicker} accessibilityRole="radiogroup">
+      {choices.map((choice) => {
+        const selected = value === choice.value;
+        return (
+          <Pressable
+            key={choice.value}
+            accessibilityRole="radio"
+            accessibilityLabel={'حالت ' + choice.label}
+            accessibilityState={{ checked: selected, selected }}
+            aria-checked={selected}
+            onPress={() => onChange(choice.value)}
+            style={({ pressed }) => [s.themeChoice, selected && s.themeChoiceActive, pressed && s.pressed]}
+          >
+            <View style={[s.themeIcon, selected && s.themeIconActive]}><Feather name={choice.icon} size={18} color={selected ? palette.primary : palette.muted} /></View>
+            <Text style={[s.themeChoiceText, selected && s.themeChoiceTextActive]}>{choice.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
 function Page({ children }: { children: ReactNode }) {
   const { width } = useWindowDimensions();
   return <SafeAreaView style={s.safe}><ScrollView contentContainerStyle={[s.page, width >= 1100 && s.pageWide]}>{children}</ScrollView></SafeAreaView>;
@@ -419,26 +497,30 @@ function TopBar({ onBack }: { onBack: () => void }) { return <View style={s.topB
 function RoundIcon({ icon, label, onPress, active }: { icon: IconName; label: string; onPress: () => void; active?: boolean }) { return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [s.round, pressed && s.pressed]}><Feather name={icon} size={21} color={active ? palette.primary : palette.ink} /></Pressable>; }
 function GoalPicker({ value, onChange }: { value: number; onChange: (value: number) => void }) { return <View style={s.goalRow}>{[1, 2, 3].map((item) => <Pressable key={item} accessibilityRole="radio" accessibilityState={{ checked: value === item }} onPress={() => onChange(item)} style={({ pressed }) => [s.goalChoice, value === item && s.goalActive, pressed && s.pressed]}><Text style={[s.goalNumber, value === item && s.goalNumberActive]}>{item}</Text><Text style={s.hint}>درس</Text></Pressable>)}</View>; }
 function SectionTitle({ title }: { title: string }) { return <Text style={s.sectionTitle}>{title}</Text>; }
-function Pill({ icon, text }: { icon: IconName; text: string }) { return <View style={s.pill}><Feather name={icon} size={14} color="#6E4900" /><Text style={s.pillText}>{text}</Text></View>; }
+function Pill({ icon, text }: { icon: IconName; text: string }) { return <View style={s.pill}><Feather name={icon} size={14} color={palette.goldInk} /><Text style={s.pillText}>{text}</Text></View>; }
 function Meta({ icon, text }: { icon: IconName; text: string }) { return <View style={s.meta}><Feather name={icon} size={14} color={palette.muted} /><Text style={s.hint}>{text}</Text></View>; }
 function Stat({ icon, value, label, color, soft }: { icon: IconName; value: string; label: string; color: string; soft: string }) { return <View style={s.stat}><View style={[s.iconSmall, { backgroundColor: soft }]}><Feather name={icon} size={20} color={color} /></View><Text style={s.statValue}>{value}</Text><Text style={s.hint}>{label}</Text></View>; }
 function PathCard({ item, onPress }: { item: Pathway; onPress: () => void }) {
   const { state } = useLearner();
   const complete = item.lessonIds.filter((id) => state.completedLessons.includes(id)).length;
   const percent = Math.round((complete / item.lessonIds.length) * 100);
-  return <Pressable accessibilityRole="button" accessibilityLabel={`مسیر ${item.title}`} onPress={onPress} style={({ pressed }) => [s.pathCard, pressed && s.pressed]}><View style={s.between}><View style={[s.pathIcon, { backgroundColor: item.softColor }]}><Feather name={item.icon} size={23} color={item.color} /></View><View style={s.chip}><Text style={s.chipText}>{item.level}</Text></View></View><Text style={s.cardTitle}>{item.title}</Text><Text style={[s.englishSmall, { color: item.color }]}>{item.englishTitle}</Text><Text style={s.hint}>{item.description}</Text><View style={s.cardFoot}><View style={s.between}><Text style={s.smallStrong}>{percent ? percent + '٪' : 'شروع نشده'}</Text><Text style={s.hint}>{item.lessonIds.length} درس</Text></View><ProgressBar value={percent} color={item.color} trackColor={item.softColor} /></View></Pressable>;
+  const softColor = themedSoftColor(item.color, item.softColor, darkMode);
+  const accentColor = themedAccentColor(item.color, darkMode);
+  return <Pressable accessibilityRole="button" accessibilityLabel={`مسیر ${item.title}`} onPress={onPress} style={({ pressed }) => [s.pathCard, pressed && s.pressed]}><View style={s.between}><View style={[s.pathIcon, { backgroundColor: softColor }]}><Feather name={item.icon} size={23} color={accentColor} /></View><View style={s.chip}><Text style={s.chipText}>{item.level}</Text></View></View><Text style={s.cardTitle}>{item.title}</Text><Text style={[s.englishSmall, { color: accentColor }]}>{item.englishTitle}</Text><Text style={s.hint}>{item.description}</Text><View style={s.cardFoot}><View style={s.between}><Text style={s.smallStrong}>{percent ? percent + '٪' : 'شروع نشده'}</Text><Text style={s.hint}>{item.lessonIds.length} درس</Text></View><ProgressBar value={percent} color={accentColor} trackColor={softColor} /></View></Pressable>;
 }
 function Empty({ icon, title, body }: { icon: IconName; title: string; body: string }) { return <View style={s.empty}><View style={s.iconHero}><Feather name={icon} size={30} color={palette.primary} /></View><Text style={s.sectionTitle}>{title}</Text><Text style={s.centerBody}>{body}</Text></View>; }
 function Notice() { return <View style={s.notice}><Feather name="shield" size={16} color={palette.muted} /><Text style={s.noticeText}>آموزش عمومی حقوق انگلستان و ولز؛ نه مشاوره حقوقی. قانون و مهلت‌ها ممکن است تغییر کنند.</Text></View>; }
 function useRootNav() { return useNavigation<NativeStackNavigationProp<RootStackParamList>>(); }
 
-const s = StyleSheet.create({
+const createStyles = (palette: AppPalette) => {
+  const shadow = createShadow(palette);
+  return StyleSheet.create({
   flex: { flex: 1 },
   flexEnd: { flex: 1, alignItems: 'flex-end' },
   safe: { flex: 1, backgroundColor: palette.background },
   pressed: { opacity: 0.72 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, backgroundColor: palette.background },
-  loadingLogo: { width: 62, height: 62, borderRadius: 21, backgroundColor: palette.primary, alignItems: 'center', justifyContent: 'center' },
+  loadingLogo: { width: 62, height: 62, borderRadius: 21, backgroundColor: palette.primaryAction, alignItems: 'center', justifyContent: 'center' },
   tabsMobile: { height: 72, paddingTop: 7, paddingBottom: 7, borderTopColor: palette.line, backgroundColor: palette.surface },
   tabsDesktop: { width: 190, paddingTop: 28, paddingHorizontal: 9, borderRightColor: palette.line, backgroundColor: palette.surface },
   tabItem: { minHeight: 54, borderRadius: radius.md },
@@ -468,13 +550,13 @@ const s = StyleSheet.create({
   hero: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 22, padding: 23, borderWidth: 1, borderColor: palette.line, borderRadius: radius.xl, backgroundColor: palette.surface, ...shadow },
   heroCopy: { flex: 2, minWidth: 260, alignItems: 'flex-end', gap: 8 },
   heroTitle: { color: palette.ink, fontSize: 26, lineHeight: 38, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
-  goalCard: { flex: 1, minWidth: 180, minHeight: 210, borderRadius: radius.lg, backgroundColor: palette.primaryDark, alignItems: 'center', justifyContent: 'center', gap: 7 },
+  goalCard: { flex: 1, minWidth: 180, minHeight: 210, borderRadius: radius.lg, backgroundColor: palette.brandSurface, alignItems: 'center', justifyContent: 'center', gap: 7 },
   goalBig: { color: palette.white, fontSize: 38, fontFamily: type.latinBold, marginTop: 8 },
-  goalCaption: { color: '#D7D1FF', fontSize: 12, fontWeight: '700', writingDirection: 'rtl' },
+  goalCaption: { color: palette.onPrimaryMuted, fontSize: 12, fontWeight: '700', writingDirection: 'rtl' },
   english: { color: palette.primary, fontFamily: type.latinSemibold, fontSize: 13, textAlign: 'right' },
   englishSmall: { color: palette.primary, fontFamily: type.latinMedium, fontSize: 10, textAlign: 'right', marginTop: 2 },
   pill: { minHeight: 30, paddingHorizontal: 11, borderRadius: radius.round, backgroundColor: palette.saffronSoft, flexDirection: 'row-reverse', alignItems: 'center', gap: 6 },
-  pillText: { color: '#6E4900', fontSize: 11, fontWeight: '800', writingDirection: 'rtl' },
+  pillText: { color: palette.goldInk, fontSize: 11, fontWeight: '800', writingDirection: 'rtl' },
   metaRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 12, marginTop: 7 },
   meta: { flexDirection: 'row-reverse', alignItems: 'center', gap: 5 },
   stats: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 12 },
@@ -517,7 +599,7 @@ const s = StyleSheet.create({
   answerGood: { borderColor: palette.success, backgroundColor: palette.tealSoft },
   answerBad: { borderColor: palette.rose, backgroundColor: palette.roseSoft },
   radio: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: palette.line, alignItems: 'center', justifyContent: 'center' },
-  radioChosen: { borderColor: palette.primary, backgroundColor: palette.primary },
+  radioChosen: { borderColor: palette.primaryAction, backgroundColor: palette.primaryAction },
   radioBad: { borderColor: palette.rose, backgroundColor: palette.rose },
   answerText: { flex: 1, color: palette.inkSoft, fontSize: 14, lineHeight: 23, textAlign: 'right', writingDirection: 'rtl' },
   feedback: { width: '100%', flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 10, padding: 14, borderRadius: radius.md },
@@ -532,24 +614,32 @@ const s = StyleSheet.create({
   glossary: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 10 },
   glossaryCard: { flexGrow: 1, flexBasis: 175, minWidth: 150, padding: 14, alignItems: 'flex-end', borderWidth: 1, borderColor: palette.line, borderRadius: radius.md, backgroundColor: palette.surface },
   searchResult: { minHeight: 80, flexDirection: 'row-reverse', alignItems: 'center', gap: 12, padding: 14, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.surface },
-  profile: { flexDirection: 'row-reverse', alignItems: 'center', gap: 15, padding: 21, borderRadius: radius.xl, backgroundColor: palette.primaryDark },
-  avatar: { width: 60, height: 60, borderRadius: 20, backgroundColor: palette.primary, alignItems: 'center', justifyContent: 'center' },
+  profile: { flexDirection: 'row-reverse', alignItems: 'center', gap: 15, padding: 21, borderRadius: radius.xl, backgroundColor: palette.brandSurface },
+  avatar: { width: 60, height: 60, borderRadius: 20, backgroundColor: palette.primaryAction, alignItems: 'center', justifyContent: 'center' },
   profileName: { color: palette.white, fontSize: 21, fontWeight: '900', writingDirection: 'rtl' },
-  profileMeta: { color: '#D7D1FF', fontSize: 11, writingDirection: 'rtl', marginTop: 4 },
+  profileMeta: { color: palette.onPrimaryMuted, fontSize: 11, writingDirection: 'rtl', marginTop: 4 },
   settings: { gap: 13, padding: 19, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.surface, ...shadow },
   nameRow: { flexDirection: 'row-reverse', gap: 8 },
   nameInput: { flex: 1, minHeight: 49, paddingHorizontal: 13, color: palette.ink, fontSize: 15, writingDirection: 'rtl', borderWidth: 1, borderColor: palette.line, borderRadius: radius.md, backgroundColor: palette.background },
   save: { minWidth: 80, minHeight: 49, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: palette.primarySoft },
   saveText: { color: palette.primary, fontSize: 13, fontWeight: '900', writingDirection: 'rtl' },
   settingRow: { minHeight: 68, flexDirection: 'row-reverse', alignItems: 'center', gap: 11, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 12 },
-  danger: { minHeight: 53, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: '#F1C4D0', borderRadius: radius.md, backgroundColor: palette.roseSoft },
+  preferenceHeading: { alignItems: 'flex-end', gap: 3, marginTop: 2 },
+  themePicker: { flexDirection: 'row-reverse', gap: 8, padding: 6, borderRadius: radius.lg, backgroundColor: palette.background, borderWidth: 1, borderColor: palette.line },
+  themeChoice: { flex: 1, minHeight: 70, alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 8, borderRadius: radius.md, borderWidth: 1, borderColor: 'transparent' },
+  themeChoiceActive: { backgroundColor: palette.primarySoft, borderColor: palette.primary },
+  themeIcon: { width: 32, height: 32, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.surfaceMuted },
+  themeIconActive: { backgroundColor: palette.surface },
+  themeChoiceText: { color: palette.muted, fontSize: 12, fontWeight: '800', writingDirection: 'rtl' },
+  themeChoiceTextActive: { color: palette.primary },
+  danger: { minHeight: 53, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: palette.borderRose, borderRadius: radius.md, backgroundColor: palette.roseSoft },
   dangerText: { color: palette.rose, fontSize: 13, fontWeight: '900', writingDirection: 'rtl' },
   notice: { flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 8, padding: 13, borderRadius: radius.md, backgroundColor: palette.surfaceMuted },
   noticeText: { flex: 1, color: palette.muted, fontSize: 10, lineHeight: 18, textAlign: 'right', writingDirection: 'rtl' },
-  specBanner: { flexDirection: 'row-reverse', alignItems: 'center', gap: 14, padding: 18, borderRadius: radius.lg, backgroundColor: palette.primaryDark },
-  specIcon: { width: 50, height: 50, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.primary },
+  specBanner: { flexDirection: 'row-reverse', alignItems: 'center', gap: 14, padding: 18, borderRadius: radius.lg, backgroundColor: palette.brandSurface },
+  specIcon: { width: 50, height: 50, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.primaryAction },
   specTitle: { color: palette.white, fontSize: 15, lineHeight: 24, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
-  specText: { color: '#D7D1FF', fontSize: 11, lineHeight: 19, textAlign: 'right', writingDirection: 'rtl', marginTop: 3 },
+  specText: { color: palette.onPrimaryMuted, fontSize: 11, lineHeight: 19, textAlign: 'right', writingDirection: 'rtl', marginTop: 3 },
   trackTabs: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, padding: 6, borderRadius: radius.lg, backgroundColor: palette.surfaceMuted },
   trackTab: { minHeight: 46, flexGrow: 1, minWidth: 92, paddingHorizontal: 15, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md },
   trackTabActive: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line, ...shadow },
@@ -581,13 +671,16 @@ const s = StyleSheet.create({
   learningPoint: { flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 10 },
   bulletDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: palette.primary, marginTop: 8 },
   learningText: { flex: 1, color: palette.inkSoft, fontSize: 14, lineHeight: 25, textAlign: 'right', writingDirection: 'rtl' },
-  exampleCard: { width: '100%', flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 11, padding: 16, borderRadius: radius.md, backgroundColor: palette.saffronSoft, borderWidth: 1, borderColor: '#E9CC80' },
-  exampleLabel: { color: '#6E4900', fontSize: 12, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
-  exampleText: { color: '#5C430D', fontSize: 13, lineHeight: 23, textAlign: 'right', writingDirection: 'rtl', marginTop: 4 },
+  exampleCard: { width: '100%', flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 11, padding: 16, borderRadius: radius.md, backgroundColor: palette.saffronSoft, borderWidth: 1, borderColor: palette.borderGold },
+  exampleLabel: { color: palette.goldInk, fontSize: 12, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
+  exampleText: { color: palette.goldBody, fontSize: 13, lineHeight: 23, textAlign: 'right', writingDirection: 'rtl', marginTop: 4 },
   checklistCard: { width: '100%', gap: 10, padding: 16, borderRadius: radius.md, backgroundColor: palette.tealSoft },
   checklistTitle: { color: palette.teal, fontSize: 13, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
   checkRow: { flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 9 },
-  checkText: { flex: 1, color: '#195C57', fontSize: 13, lineHeight: 22, textAlign: 'right', writingDirection: 'rtl' },
+  checkText: { flex: 1, color: palette.tealInk, fontSize: 13, lineHeight: 22, textAlign: 'right', writingDirection: 'rtl' },
   sourceNote: { width: '100%', flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 8, paddingTop: 4 },
   sourceText: { flex: 1, color: palette.muted, fontSize: 10, lineHeight: 18, textAlign: 'right', writingDirection: 'rtl' },
-});
+  });
+};
+
+s = createStyles(lightPalette);

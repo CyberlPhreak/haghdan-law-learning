@@ -12,6 +12,8 @@ export type AppPalette = {
   muted: string;
   line: string;
   primary: string;
+  primaryAction: string;
+  onPrimaryAction: string;
   primaryDark: string;
   primarySoft: string;
   brandSurface: string;
@@ -46,6 +48,8 @@ export const lightPalette: AppPalette = {
   muted: '#716D84',
   line: '#E3E0EE',
   primary: '#4B3DB8',
+  primaryAction: '#4B3DB8',
+  onPrimaryAction: '#FFFFFF',
   primaryDark: '#2F267A',
   primarySoft: '#ECE9FF',
   brandSurface: '#2F267A',
@@ -80,6 +84,8 @@ export const darkPalette: AppPalette = {
   muted: '#AAA5BA',
   line: '#33405A',
   primary: '#A99DFF',
+  primaryAction: '#6656D9',
+  onPrimaryAction: '#FFFFFF',
   primaryDark: '#CEC8FF',
   primarySoft: '#29264B',
   brandSurface: '#211C4D',

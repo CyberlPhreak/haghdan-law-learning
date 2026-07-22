@@ -1,5 +1,7 @@
 import type { IconName, Lesson, Pathway, QuizQuestion } from './curriculum';
 import { flkKnowledge } from './sqe-knowledge';
+import { allocateBlueprintCounts } from './sqe-spec';
+import { sqe2StationLessons, sqe2Stations, stationLessonIdsForSkill } from './sqe2-stations';
 
 export type SqeStage = 'FLK1' | 'FLK2';
 export type SqeTrack = SqeStage | 'SQE2' | 'EVERYDAY';
@@ -26,6 +28,7 @@ const seeds: Seed[] = [
       'business-finance~سهام، بدهی و تضمین~Equity, debt and security~shares، loan finance، fixed/floating charges و registration',
       'business-transactions~خرید و فروش کسب‌وکار~Business transactions~asset/share purchase، due diligence، warranties و indemnities',
       'business-insolvency~ورشکستگی~Insolvency~insolvency tests، voidable transactions، director duties و creditor priority',
+      'business-personal-insolvency~ورشکستگی شخصی~Personal bankruptcy~statutory demand، bankruptcy petition، estate، trustee، restrictions و discharge',
       'business-tax~مالیات کسب‌وکار~Business taxation~Income Tax، Corporation Tax، CGT، VAT و reliefهای اصلی',
     ],
   },
@@ -36,6 +39,7 @@ const seeds: Seed[] = [
     units:[
       'dispute-merits~ارزیابی اولیه و مرور زمان~Merits and limitation~عناصر دعوا، parties، remedies، evidence و محاسبه limitation',
       'dispute-preaction~Pre-action و ADR~Pre-action conduct and ADR~protocol، letter of claim، response، settlement و آثار رد ADR',
+      'dispute-jurisdiction~صلاحیت و قانون قابل اعمال~Jurisdiction and applicable law~service خارج قلمرو، permission، applicable law، foreign judgment و استفاده از زبان ولزی',
       'dispute-issue~صدور، ابلاغ و دفاع~Issue, service and defence~claim form، particulars، deemed service، acknowledgment و defence',
       'dispute-interim~مدیریت و اقدامات موقت~Case management and interim remedies~tracks، directions، sanctions، summary judgment و injunction',
       'dispute-evidence~افشا و ادله~Disclosure and evidence~control، privilege، witness statements، experts و burden',
@@ -86,6 +90,7 @@ const seeds: Seed[] = [
     units:[
       'public-constitution~ساختار قانون اساسی~Constitutional structure~sovereignty، rule of law، separation of powers، prerogative و conventions',
       'public-devolution~Devolution و قانون ولز~Devolution and Welsh law~devolved powers، reserved matters و تفاوت England/Wales',
+      'public-order~نظم عمومی~Public order law~processions، assemblies، conditions، prohibited trespassory assemblies و breach of the peace',
       'public-jr~بازبینی قضایی~Judicial review~amenability، standing، time، illegality، unfairness، irrationality و remedies',
       'public-rights~حقوق بشر~Human rights~Human Rights Act، public authorities، qualified rights و proportionality',
       'public-eu~حقوق اروپایی~European law~EU-related sources، effect و interpretation با توجه به regime و date',
@@ -101,6 +106,7 @@ const seeds: Seed[] = [
       'ethics-conflict~تعارض و محرمانگی~Conflict and confidentiality~own/client conflicts، current/former clients و disclosure',
       'ethics-aml~AML و source of funds~Money laundering~risk، CDD، beneficial owner، suspicion، reporting و tipping off',
       'ethics-regulation~تنظیم خدمات حقوقی~Regulation of legal services~authorisation، reserved activities، undertakings و financial services',
+      'services-funding~تأمین هزینه خدمات حقوقی~Funding legal services~private retainer، CFA، DBA، fixed fee، legal aid، insurance و third-party funding',
     ],
   },
   {
@@ -114,6 +120,7 @@ const seeds: Seed[] = [
       'property-finance~وام و mortgage~Finance and mortgage~mortgage offer، lender requirements، report on title و redemption',
       'property-completion~Completion و registration~Completion and registration~statement، transfer، SDLT/LTT، priority و Land Registry',
       'property-leasehold~Leasehold~Leasehold practice~lease terms، assignment، consent، service charge و landlord enquiries',
+      'property-commercial-leases~اجاره تجاری~Commercial lease practice~grant، underlease، assignment، AGA، breach remedies و security of tenure under LTA 1954',
       'property-planning-tax~Planning و مالیات ملک~Planning and property tax~planning/building control و تفاوت SDLT با LTT',
     ],
   },
@@ -125,6 +132,7 @@ const seeds: Seed[] = [
       'wills-validity~اعتبار وصیت~Will validity~capacity، knowledge/approval، formalities، witnesses و undue influence',
       'wills-revocation~تغییر و revocation~Alteration and revocation~codicil، revocation، marriage، destruction و revival',
       'wills-intestacy~Intestacy~Intestacy~entitlement همسر یا civil partner، issue و سایر relatives',
+      'wills-outside-estate~اموال خارج از estate~Property outside the estate~joint property، life policy، pension benefits و trust property',
       'wills-grants~نمایندگان و grants~Representatives and grants~executor، administrator، probate و letters of administration',
       'wills-administration~اداره و توزیع estate~Estate administration~assets، debts، notices، accounts، legacies و distribution',
       'wills-tax~IHT و family provision~IHT and family provision~lifetime transfers، exemptions، reliefs و reasonable provision claims',
@@ -151,6 +159,7 @@ const seeds: Seed[] = [
       'land-coownership~Co-ownership~Co-ownership~joint tenancy، tenancy in common، severance، overreaching و TOLATA',
       'land-easements~Easements~Easements~characteristics، creation، prescription و registration',
       'land-covenants~Freehold covenants~Freehold covenants~benefit/burden at law/equity و remedies',
+      'land-leases~Lease و licence~Leases and licences~exclusive possession، term، privity، alienation، covenants، forfeiture و termination',
       'land-mortgages~Mortgages~Mortgages~creation، priority، possession، sale و lender duties',
     ],
   },
@@ -161,10 +170,13 @@ const seeds: Seed[] = [
     units:[
       'trusts-certainties~Express trust و certainties~Express trusts and certainties~intention، subject matter، objects و beneficiary principle',
       'trusts-constitution~Constitution~Constitution~انتقال property، declaration و volunteers',
+      'trusts-charitable~Charitable و purpose trusts~Charitable and purpose trusts~charitable purposes، public benefit، enforcement و non-charitable purpose rule',
       'trusts-trustees~Trustees~Trustees~appointment، removal، investment، delegation، maintenance و advancement',
       'trusts-duties~Fiduciary duties~Fiduciary duties~no conflict/profit، care، impartiality، accounts و information',
       'trusts-breach~Breach و remedies~Breach and remedies~compensation، account، proprietary claims، tracing و recipients',
+      'trusts-thirdparty~مسئولیت اشخاص ثالث~Third-party liability~knowing receipt، dishonest assistance، personal remedy و proprietary tracing',
       'trusts-implied~Resulting و constructive trusts~Resulting and constructive trusts~presumptions، common intention و proprietary estoppel',
+      'trusts-family-home~تراست خانه خانوادگی~Trusts of the family home~sole/joint legal title، express declaration، common intention، contributions و quantification',
     ],
   },
   {
@@ -315,7 +327,11 @@ const makeQuestion = (subject: Seed, raw: string, variant: number): SqeQuestion 
   const unit = row(raw);
   const topics = splitFocus(unit.focus);
   const rules = flkKnowledge[unit.id] ?? topics.map(topic => 'قاعده، عناصر، استثناها و اثر عملیِ ' + topic + ' را مشخص کنید.');
-  const scenario = scenarioContexts[subject.id] ?? 'یک موکل با مسئله‌ای چندمرحله‌ای برای advice مراجعه کرده است.';
+  const scenario = subject.id === 'flk2-accounts'
+    ? variant % 2 === 0
+      ? 'در جریان completion یک معامله ملک، firm باید receipt، client ledger، lender funds و payment مجاز را ثبت و کنترل کند.'
+      : 'در اداره یک estate، firm پول حاصل از assets را دریافت کرده و باید client money، پرداخت debts و accounting entries را درست مدیریت کند.'
+    : scenarioContexts[subject.id] ?? 'یک موکل با مسئله‌ای چندمرحله‌ای برای advice مراجعه کرده است.';
   const correctAnswers = [
     rules[0]!,
     rules[1] ?? rules[0]!,
@@ -453,20 +469,44 @@ const makeLesson = (subject: Seed, raw: string): Lesson => {
   };
 };
 
-export const sqeLessons: Lesson[] = seeds.flatMap(subject => subject.units.map(raw => makeLesson(subject, raw)));
+export const sqeLessons: Lesson[] = [
+  ...seeds.flatMap(subject => subject.units.map(raw => makeLesson(subject, raw))),
+  ...sqe2StationLessons,
+];
 export const sqePathways: Pathway[] = seeds.map(subject => ({
   id:subject.id,track:subject.stage,title:subject.fa,englishTitle:subject.en,description:subject.description,
   icon:subject.icon,color:subject.color,softColor:subject.soft,level:subject.stage==='SQE2'?'مهارت عملی':subject.stage,
-  lessonIds:subject.units.map(raw => row(raw).id),
+  lessonIds:[...subject.units.map(raw => row(raw).id), ...(subject.stage === 'SQE2' ? stationLessonIdsForSkill(subject.id) : [])],
 }));
 export const sqeQuestions: SqeQuestion[] = seeds.filter(subject => subject.stage==='FLK1'||subject.stage==='FLK2').flatMap(subject =>
   subject.units.flatMap(raw => Array.from({ length: 12 }, (_, variant) => makeQuestion(subject, raw, variant))),
 );
 export const questionsForStage = (stage: SqeStage) => sqeQuestions.filter(question => question.stage === stage);
+
+const shuffleQuestions = (items: SqeQuestion[]) => {
+  const copy = [...items];
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [copy[index], copy[swapIndex]] = [copy[swapIndex]!, copy[index]!];
+  }
+  return copy;
+};
+
+export const buildBalancedTestQuestions = (stage: SqeStage, count: number, subjectId?: string) => {
+  const pool = questionsForStage(stage);
+  if (subjectId) return shuffleQuestions(pool.filter((question) => question.subjectId === subjectId)).slice(0, count);
+
+  const allocations = allocateBlueprintCounts(stage, Math.min(count, pool.length));
+  const selected = Object.entries(allocations).flatMap(([allocatedSubjectId, allocatedCount]) =>
+    shuffleQuestions(pool.filter((question) => question.subjectId === allocatedSubjectId)).slice(0, allocatedCount),
+  );
+  return shuffleQuestions(selected);
+};
+
 export const stageSubjects = (track: SqeTrack) => sqePathways.filter(pathway => pathway.track === track);
 export const sqeTotals = {
   flk1Subjects:seeds.filter(subject=>subject.stage==='FLK1').length,
   flk2Subjects:seeds.filter(subject=>subject.stage==='FLK2').length,
   sqe2Skills:seeds.filter(subject=>subject.stage==='SQE2').length,
-  lessons:sqeLessons.length,practiceQuestions:sqeQuestions.length,
+  lessons:sqeLessons.length,practiceQuestions:sqeQuestions.length,sqe2Stations:sqe2Stations.length,
 };

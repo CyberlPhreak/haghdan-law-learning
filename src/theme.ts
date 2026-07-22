@@ -36,6 +36,8 @@ export type AppPalette = {
   secondaryBorder: string;
   overlayBorder: string;
   overlaySurface: string;
+  imageScrim: string;
+  imageScrimStrong: string;
   shadow: string;
 };
 
@@ -72,6 +74,8 @@ export const lightPalette: AppPalette = {
   secondaryBorder: '#D6D0FF',
   overlayBorder: 'rgba(255,255,255,0.18)',
   overlaySurface: 'rgba(255,255,255,0.08)',
+  imageScrim: 'rgba(255,255,255,0.08)',
+  imageScrimStrong: 'rgba(8,12,28,0.70)',
   shadow: '#2F267A',
 };
 
@@ -108,6 +112,8 @@ export const darkPalette: AppPalette = {
   secondaryBorder: '#5B5292',
   overlayBorder: 'rgba(255,255,255,0.22)',
   overlaySurface: 'rgba(255,255,255,0.10)',
+  imageScrim: 'rgba(4,7,15,0.16)',
+  imageScrimStrong: 'rgba(4,7,15,0.72)',
   shadow: '#000000',
 };
 

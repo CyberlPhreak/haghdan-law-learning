@@ -1,12 +1,12 @@
 # Privacy Policy — HaghDān / حق‌دان
 
-Effective date: 19 July 2026
+Effective date: 21 July 2026
 
-HaghDān is an offline-first legal learning application. This repository version does not require an account, does not contain advertising SDKs, does not use analytics or tracking SDKs, and does not transmit learning progress to a HaghDān server.
+HaghDān is an offline-first legal learning application. This repository version uses a local account gate, does not contain advertising SDKs, does not use analytics or tracking SDKs, and does not transmit account details or learning progress to a HaghDān server.
 
 ## Data stored on the device
 
-The app stores the learner name or nickname, daily goal, completed lessons, quiz scores, bookmarks, review schedule, study streak and test-attempt history locally through the device's application storage.
+The app stores the learner name or nickname, username, a salted iterative hash of the local PIN, acceptance timestamp, daily goal, completed lessons, quiz scores, bookmarks, review schedule, study streak and test-attempt history locally through the device's application storage. The PIN itself is not stored.
 
 This information remains on the device unless the user includes it in a device backup managed by Apple, Google or another operating-system provider.
 
@@ -24,7 +24,7 @@ App-store distribution, downloads, crash reporting performed by the operating sy
 
 ## Children
 
-The app is educational but is not designed to collect personal information from children. No account or free-text community feature is provided.
+The app is educational but is not designed to collect personal information from children. The local account is not transmitted to HaghDān and no free-text community feature is provided.
 
 ## Changes and contact
 

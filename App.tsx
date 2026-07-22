@@ -10,6 +10,7 @@ import { ActivityIndicator, StyleSheet, View, useColorScheme } from 'react-nativ
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { HaghDanApp } from './src/navigation';
+import { I18nProvider } from './src/i18n';
 import { SoundProvider } from './src/sound';
 import { LearnerProvider, useLearner } from './src/store';
 import { AppThemeProvider, darkPalette, lightPalette, useAppTheme } from './src/theme';
@@ -17,11 +18,13 @@ import { AppThemeProvider, darkPalette, lightPalette, useAppTheme } from './src/
 function ThemedApplication() {
   const { state } = useLearner();
   return (
-    <AppThemeProvider mode={state.themeMode}>
-      <SoundProvider>
-        <ApplicationChrome />
-      </SoundProvider>
-    </AppThemeProvider>
+    <I18nProvider language={state.language}>
+      <AppThemeProvider mode={state.themeMode}>
+        <SoundProvider>
+          <ApplicationChrome />
+        </SoundProvider>
+      </AppThemeProvider>
+    </I18nProvider>
   );
 }
 

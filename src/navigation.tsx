@@ -76,7 +76,7 @@ export function HaghDanApp() {
   if (!state.authenticated) return <Authentication />;
   return (
     <NavigationContainer theme={{ ...DefaultTheme, dark: darkMode, colors: { ...DefaultTheme.colors, primary: palette.primary, background: palette.background, card: palette.surface, text: palette.ink, border: palette.line } }}>
-      <Root.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: palette.background } }}>
+      <Root.Navigator screenOptions={{ headerShown: false, animation: isRtl ? 'slide_from_left' : 'slide_from_right', contentStyle: { backgroundColor: palette.background } }}>
         <Root.Screen name="Main" component={MainTabs} />
         <Root.Screen name="Pathway" component={PathwayScreen} />
         <Root.Screen name="Lesson" component={LessonScreen} />
@@ -300,7 +300,7 @@ function GameStatusCard({ game, onPress }: { game: GameProfile; onPress: () => v
       <View style={s.gameStatusTop}>
         <View style={s.levelMedallion}><Feather name={game.level.icon} size={23} color={palette.goldInk} /></View>
         <View style={s.flexEnd}><Text style={s.gameEyebrow}>{t('game.club')} · {t('common.level')} {formatNumber(game.level.level)}</Text><Text style={s.gameStatusTitle}>{levelTitle}</Text></View>
-        <Feather name="chevron-left" size={23} color={palette.onPrimaryMuted} />
+        <DirectionalChevron size={23} color={palette.onPrimaryMuted} />
       </View>
       <View style={s.gameProgressCopy}><Text style={s.gameProgressText}>{game.nextLevel ? t('game.toNext', { count: formatNumber(game.xpToNext) }) : t('game.maxLevel')}</Text><Text style={s.gameXp}>{formatNumber(game.xp)} XP</Text></View>
       <ProgressBar value={game.levelProgress} color={palette.saffron} trackColor={palette.overlayBorder} />
@@ -434,7 +434,7 @@ function PathwayScreen({ route, navigation }: PathProps) {
         return <Pressable key={id} accessibilityRole="button" onPress={() => navigation.navigate('Lesson', { lessonId: id })} style={({ pressed }) => [s.lessonRow, pressed && s.pressed]}>
           <View style={[s.lessonNumber, done && s.done]}>{done ? <Feather name="check" size={18} color={palette.white} /> : <Text style={s.number}>{index + 1}</Text>}</View>
           <View style={s.flexEnd}><Text style={s.cardTitle}>{legalTitle(lesson.title, lesson.englishTitle)}</Text>{secondaryLegalTitle(lesson.title, lesson.englishTitle) ? <Text style={s.englishSmall}>{secondaryLegalTitle(lesson.title, lesson.englishTitle)}</Text> : null}<View style={s.metaRow}><Meta icon="clock" text={t('home.minutes', { count: formatNumber(lesson.duration) })} />{state.quizScores[id] !== undefined ? <Meta icon="award" text={formatNumber(state.quizScores[id]) + '%'} /> : null}</View></View>
-          <Feather name="chevron-left" size={22} color={palette.muted} />
+          <DirectionalChevron size={22} color={palette.muted} />
         </Pressable>;
       })}</View>
       <Notice />
@@ -514,7 +514,7 @@ function LessonScreen({ route, navigation }: LessonProps) {
       <View style={s.lessonTop}><RoundIcon icon="x" label={t('lesson.close')} onPress={navigation.goBack} /><View style={s.flex}><ProgressBar value={progress} /></View><RoundIcon icon="bookmark" label={t('lesson.save')} active={saved} onPress={() => toggleSaved(item.id)} /></View>
       <ScrollView contentContainerStyle={s.lessonPage}>
         <MotionView style={s.lessonMotion} replayKey={`${section}-${quiz}-${finished}`} distance={10}>
-        {finished ? <View style={s.result}><CelebrationBurst icon="award" tone={result >= 70 ? 'success' : 'gold'} /><Text style={s.eyebrow}>{t('lesson.complete')}</Text><Text style={s.pathHeroTitle}>{legalTitle(item.title, item.englishTitle)}</Text><Text style={s.score}>{formatNumber(result)}%</Text><View style={s.rewardRow}><RewardChip icon="zap" value={`+${formatNumber(earnedXp)} XP`} label="XP" /><RewardChip icon="activity" value={formatNumber(bestCombo)} label={t('lesson.chain', { count: formatNumber(bestCombo) })} /></View><Text style={s.centerBody}>{t('lesson.progressSaved')}</Text><ActionButton label={t('lesson.backPath')} icon="arrow-left" onPress={navigation.goBack} fullWidth /></View>
+        {finished ? <View style={s.result}><CelebrationBurst icon="award" tone={result >= 70 ? 'success' : 'gold'} /><Text style={s.eyebrow}>{t('lesson.complete')}</Text><Text style={s.pathHeroTitle}>{legalTitle(item.title, item.englishTitle)}</Text><Text style={s.score}>{formatNumber(result)}%</Text><View style={s.rewardRow}><RewardChip icon="zap" value={`+${formatNumber(earnedXp)} XP`} label="XP" /><RewardChip icon="activity" value={formatNumber(bestCombo)} label={t('lesson.chain', { count: formatNumber(bestCombo) })} /></View><Text style={s.centerBody}>{t('lesson.progressSaved')}</Text><ActionButton label={t('lesson.backPath')} icon="arrow-right" onPress={navigation.goBack} fullWidth /></View>
         : quiz < 0 ? <LessonSection item={item} index={section} />
         : question ? <QuizCard question={question} selected={selected} revealed={revealed} combo={combo} onSelect={setSelected} /> : null}
         </MotionView>
@@ -642,7 +642,7 @@ function TestScreen({ route, navigation }: TestProps) {
       const subjectCorrect = subjectQuestions.filter((item) => answers[item.id] === item.correctIndex).length;
       return { subject, total: subjectQuestions.length, correct: subjectCorrect, score: subjectQuestions.length ? Math.round(subjectCorrect / subjectQuestions.length * 100) : 0 };
     }).filter((item) => item.total);
-    return <SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.testPage}><TopBar onBack={navigation.goBack} /><View style={s.result}><CelebrationBurst icon={score>=70?'award':'trending-up'} tone={score>=70?'success':'gold'} /><Text style={s.eyebrow}>{t('test.result', { stage })}</Text><Text style={s.pathHeroTitle}>{modeTitle}</Text><Text style={s.score}>{formatNumber(score)}%</Text><View style={s.rewardRow}><RewardChip icon="zap" value={`+${formatNumber(earnedXp)} XP`} label="XP" /><RewardChip icon="check-circle" value={formatNumber(correct)} label={t('common.correct')} /></View><Text style={s.centerBody}>{formatNumber(correct)}/{formatNumber(questions.length)} {t('common.correct')}</Text></View><SectionTitle title={t('test.breakdown')} /><View style={s.list}>{breakdown.map(({subject,total,correct:subjectCorrect,score:subjectScore})=><View key={subject.id} style={s.breakdownRow}><View style={s.flexEnd}><Text style={s.modeTitle}>{legalTitle(subject.title, subject.englishTitle)}</Text><Text style={s.hint}>{formatNumber(subjectCorrect)}/{formatNumber(total)} {t('common.correct')}</Text></View><View style={s.breakdownScore}><Text style={s.smallStrong}>{formatNumber(subjectScore)}%</Text></View></View>)}</View><ActionButton label={t('test.back')} icon="arrow-left" onPress={navigation.goBack} fullWidth /><Notice /></ScrollView></SafeAreaView>;
+    return <SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.testPage}><TopBar onBack={navigation.goBack} /><View style={s.result}><CelebrationBurst icon={score>=70?'award':'trending-up'} tone={score>=70?'success':'gold'} /><Text style={s.eyebrow}>{t('test.result', { stage })}</Text><Text style={s.pathHeroTitle}>{modeTitle}</Text><Text style={s.score}>{formatNumber(score)}%</Text><View style={s.rewardRow}><RewardChip icon="zap" value={`+${formatNumber(earnedXp)} XP`} label="XP" /><RewardChip icon="check-circle" value={formatNumber(correct)} label={t('common.correct')} /></View><Text style={s.centerBody}>{formatNumber(correct)}/{formatNumber(questions.length)} {t('common.correct')}</Text></View><SectionTitle title={t('test.breakdown')} /><View style={s.list}>{breakdown.map(({subject,total,correct:subjectCorrect,score:subjectScore})=><View key={subject.id} style={s.breakdownRow}><View style={s.flexEnd}><Text style={s.modeTitle}>{legalTitle(subject.title, subject.englishTitle)}</Text><Text style={s.hint}>{formatNumber(subjectCorrect)}/{formatNumber(total)} {t('common.correct')}</Text></View><View style={s.breakdownScore}><Text style={s.smallStrong}>{formatNumber(subjectScore)}%</Text></View></View>)}</View><ActionButton label={t('test.back')} icon="arrow-right" onPress={navigation.goBack} fullWidth /><Notice /></ScrollView></SafeAreaView>;
   }
 
   if (inBreak) {
@@ -709,7 +709,7 @@ function Practice() {
   };
   return <Page>
     <Header eyebrow="SQE1" title={t('practice.title')} subtitle={t('practice.subtitle', { count: formatNumber(sqeTotals.practiceQuestions) })} />
-    <View style={s.examGrid}>{(['FLK1','FLK2'] as SqeStage[]).map((stage) => <View key={stage} style={s.examPanel}><View style={s.between}><View style={[s.pathIcon,{backgroundColor:stage==='FLK1'?palette.primarySoft:palette.tealSoft}]}><Feather name={stage==='FLK1'?'briefcase':'home'} size={23} color={stage==='FLK1'?palette.primary:palette.teal} /></View><View style={s.flexEnd}><Text style={s.examStage}>{stage}</Text><Text style={s.hint}>{formatNumber(stageSubjects(stage).length)} · {best(stage)}</Text></View></View><View style={s.list}>{modes.map((item) => <Pressable key={item.mode} accessibilityRole="button" onPress={() => nav.navigate('Test',{stage,count:item.count,mode:item.mode})} style={({pressed})=>[s.modeRow,pressed&&s.pressed]}><View style={s.modeIcon}><Feather name={item.icon} size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.modeTitle}>{item.title}</Text><Text style={s.hint}>{item.subtitle}</Text></View><Feather name="chevron-left" size={20} color={palette.muted} /></Pressable>)}</View></View>)}</View>
+    <View style={s.examGrid}>{(['FLK1','FLK2'] as SqeStage[]).map((stage) => <View key={stage} style={s.examPanel}><View style={s.between}><View style={[s.pathIcon,{backgroundColor:stage==='FLK1'?palette.primarySoft:palette.tealSoft}]}><Feather name={stage==='FLK1'?'briefcase':'home'} size={23} color={stage==='FLK1'?palette.primary:palette.teal} /></View><View style={s.flexEnd}><Text style={s.examStage}>{stage}</Text><Text style={s.hint}>{formatNumber(stageSubjects(stage).length)} · {best(stage)}</Text></View></View><View style={s.list}>{modes.map((item) => <Pressable key={item.mode} accessibilityRole="button" onPress={() => nav.navigate('Test',{stage,count:item.count,mode:item.mode})} style={({pressed})=>[s.modeRow,pressed&&s.pressed]}><View style={s.modeIcon}><Feather name={item.icon} size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.modeTitle}>{item.title}</Text><Text style={s.hint}>{item.subtitle}</Text></View><DirectionalChevron size={20} color={palette.muted} /></Pressable>)}</View></View>)}</View>
     <View style={s.examNote}><Feather name="info" size={20} color={palette.primary} /><View style={s.flexEnd}><Text style={s.smallStrong}>{t('practice.full')}</Text><Text style={s.hint}>{t('practice.subtitle', { count: formatNumber(180) })} · Annex 4 · 2 × 90 · 2 × 153 min</Text></View></View>
     <SectionTitle title={t('practice.recent')} />
     {state.testHistory.length ? <View style={s.list}>{state.testHistory.slice(0,6).map((item)=><View key={item.id} style={s.historyRow}><View style={[s.scoreBadge,{backgroundColor:item.score>=70?palette.tealSoft:palette.saffronSoft}]}><Text style={s.scoreBadgeText}>{formatNumber(item.score)}%</Text></View><View style={s.flexEnd}><Text style={s.cardTitle}>{item.stage} · {formatNumber(item.total)} {t('common.questions')}</Text><Text style={s.hint}>{new Date(item.completedAt).toLocaleDateString(locale)} · {formatNumber(item.correct)} {t('common.correct')}</Text></View></View>)}</View>:<Empty icon="bar-chart-2" title={t('practice.empty')} body={t('practice.subtitle', { count: formatNumber(sqeTotals.practiceQuestions) })} />}
@@ -912,6 +912,7 @@ function Header({ eyebrow, title, subtitle }: { eyebrow: string; title: string; 
   return <View style={s.header}><Brand /><View style={s.flexEnd}><View style={s.headerEyebrow}><View style={s.headerDot} /><Text style={s.eyebrow}>{eyebrow}</Text></View><Text style={s.pageTitle}>{title}</Text><Text style={s.body}>{subtitle}</Text></View></View>;
 }
 function TopBar({ onBack }: { onBack: () => void }) { const { t, isRtl } = useI18n(); return <View style={s.topBar}><Brand /><RoundIcon icon={isRtl ? 'arrow-right' : 'arrow-left'} label={t('common.back')} onPress={onBack} /></View>; }
+function DirectionalChevron({ size, color }: { size: number; color: string }) { const { isRtl } = useI18n(); return <Feather name={isRtl ? 'chevron-left' : 'chevron-right'} size={size} color={color} />; }
 function RoundIcon({ icon, label, onPress, active }: { icon: IconName; label: string; onPress: () => void; active?: boolean }) { return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [s.round, pressed && s.pressed]}><Feather name={icon} size={21} color={active ? palette.primary : palette.ink} /></Pressable>; }
 function GoalPicker({ value, onChange }: { value: number; onChange: (value: number) => void }) { const { t, formatNumber } = useI18n(); return <View style={s.goalRow}>{[1, 2, 3].map((item) => <Pressable key={item} accessibilityRole="radio" accessibilityLabel={`${formatNumber(item)} ${t('common.lessons')}`} accessibilityState={{ checked: value === item }} onPress={() => onChange(item)} style={({ pressed }) => [s.goalChoice, value === item && s.goalActive, pressed && s.pressed]}><Text style={[s.goalNumber, value === item && s.goalNumberActive]}>{formatNumber(item)}</Text><Text style={s.hint}>{t('common.lesson')}</Text></Pressable>)}</View>; }
 function SectionTitle({ title }: { title: string }) { return <View style={s.sectionHeading}><View style={s.sectionMarker} /><Text style={s.sectionTitle}>{title}</Text></View>; }
@@ -955,7 +956,8 @@ function useRootNav() { return useNavigation<NativeStackNavigationProp<RootStack
 
 const createStyles = (palette: AppPalette, isRtl = true) => {
   const shadow = createShadow(palette);
-  const rowDirection = isRtl ? 'row-reverse' : 'row';
+  // Web follows document.dir; reversing again here would turn RTL rows back into LTR.
+  const rowDirection = Platform.OS === 'web' ? 'row' : isRtl ? 'row-reverse' : 'row';
   const logicalEnd = isRtl ? 'flex-end' : 'flex-start';
   return StyleSheet.create({
   flex: { flex: 1 },

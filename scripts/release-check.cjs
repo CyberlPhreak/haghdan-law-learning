@@ -45,7 +45,10 @@ if (analyticsSource.includes('buildLearningAnalytics') && analyticsSource.includ
 else fail('Progress analytics dashboard is incomplete');
 if (gamificationSource.includes('buildGameProfile') && gamificationSource.includes('gameLevels') && gamificationSource.includes('DailyMission') && gamificationSource.includes('Achievement') && storeSource.includes('xp: current.xp + lessonXp') && navigationSource.includes('GameHubScreen') && navigationSource.includes('comboPill') && navigationSource.includes('CelebrationBurst')) pass('Persistent XP, missions, achievements, answer chains, and celebrations configured');
 else fail('Learning game layer is incomplete');
-if (['fa', 'en', 'zh', 'ar', 'es'].every(code => i18nSource.includes(`code: '${code}'`)) && i18nSource.includes('I18nProvider') && i18nSource.includes('LocalizedText') && i18nSource.includes('legalTitle') && storeSource.includes("language: 'fa'") && navigationSource.includes('LanguagePicker') && navigationSource.includes("const rowDirection = isRtl ? 'row-reverse' : 'row'")) pass('Persistent multilingual UI, RTL/LTR layout, and reviewed-content fallback configured');
+const platformAwareRowDirection = "Platform.OS === 'web' ? 'row' : isRtl ? 'row-reverse' : 'row'";
+const languageDirectionsConfigured = [['fa', true], ['en', false], ['zh', false], ['ar', true], ['es', false]].every(([code, rtl]) => new RegExp(`code: '${code}'[^\\n]+rtl: ${rtl}`).test(i18nSource));
+const directionalNavigationConfigured = componentsSource.includes("!isRtl && icon === 'arrow-left'") && navigationSource.includes("isRtl ? 'chevron-left' : 'chevron-right'");
+if (languageDirectionsConfigured && i18nSource.includes('I18nProvider') && i18nSource.includes('LocalizedText') && i18nSource.includes('legalTitle') && i18nSource.includes('document.documentElement.dir') && storeSource.includes("language: 'fa'") && navigationSource.includes('LanguagePicker') && navigationSource.includes(platformAwareRowDirection) && componentsSource.includes(platformAwareRowDirection) && directionalNavigationConfigured) pass('Persistent multilingual UI, RTL/LTR layout, and directional navigation configured');
 else fail('Multilingual interface configuration is incomplete');
 const containsPersian = source => /[\u0600-\u06ff]/.test(source);
 const componentPersian = componentsSource.match(/[\u0600-\u06ff]+/g) || [];
@@ -55,11 +58,15 @@ if (legalContentSource.includes('localizeLesson') && legalContentSource.includes
 else fail('Translated curriculum and mock-question packs are incomplete');
 if (soundSource.includes('playMilestone') && soundSource.includes('correctAccentPlayer') && soundSource.includes('milestoneAccentSecond') && soundSource.includes('playsInSilentMode: true') && soundSource.includes('previewTap')) pass('Audible layered answer and milestone sound feedback configured');
 else fail('Premium layered sound feedback is incomplete');
-if (subjectArtSource.includes("'flk1-business': 'business'") && subjectArtSource.includes("'sqe2-interview': 'clientSkills'") && navigationSource.includes('ImageBackground') && navigationSource.includes('NavigationIcon')) pass('Illustrated pathways and premium navigation configured');
-else fail('Illustrated pathway or navigation treatment is incomplete');
+const pathwayArtEntries = [...subjectArtSource.matchAll(/^\s+(?:'([^']+)'|([a-z][a-z0-9-]*)): (.+),$/gm)];
+const pathwayArtIds = pathwayArtEntries.map(match => match[1] || match[2]);
+const pathwayArtSources = pathwayArtEntries.map(match => match[3]);
+if (pathwayArtIds.length === 25 && new Set(pathwayArtIds).size === 25 && new Set(pathwayArtSources).size === 25 && navigationSource.includes('ImageBackground') && navigationSource.includes('NavigationIcon')) pass('All 25 pathways have distinct illustrated backgrounds and premium navigation');
+else fail('A pathway is missing distinct artwork or the navigation treatment is incomplete');
 
 ['assets/icon.png','assets/adaptive-icon.png','assets/splash-icon.png','assets/favicon.png','assets/sounds/tap.wav','assets/sounds/correct-clap.wav','assets/sounds/incorrect.wav','docs/PRIVACY_POLICY.md','docs/TERMS_AND_DISCLAIMER.md','docs/EDITORIAL_POLICY.md','docs/SRA_COVERAGE_AUDIT.md','eas.json','PUBLISHING.md'].forEach(path => requireFile(path, path.endsWith('.png') || path.endsWith('.wav') ? 1000 : 100));
 ['src/art-business.ts','src/art-dispute.ts','src/art-contractEthics.ts','src/art-property.ts','src/art-estates.ts','src/art-institutions.ts','src/art-criminal.ts','src/art-clientSkills.ts'].forEach(path => requireFile(path, 30000));
+['flk1-tort','flk1-public','flk1-services','flk2-accounts','flk2-land','flk2-trusts','flk2-criminal-practice','sqe2-advocacy','sqe2-analysis','sqe2-research','sqe2-writing','sqe2-drafting','foundations','housing','employment','immigration','police'].forEach(name => requireFile(`assets/subjects/${name}.jpg`, 100000));
 
 const curriculum = fs.readFileSync('src/sqe.ts', 'utf8');
 const knowledge = fs.readFileSync('src/sqe-knowledge.ts', 'utf8');
@@ -86,7 +93,7 @@ else fail('SQE2 station/context coverage is incomplete');
 if (sqeSpec.includes("checkedAt: '2026-07-22'") && sqeSpec.includes('september2026Changes') && sqeSpec.includes('sqe1-annex4')) pass('Versioned SRA specification and September 2026 transition mapped');
 else fail('SRA specification version mapping is incomplete');
 
-const tsc = spawnSync('.\\node_modules\\.bin\\tsc.cmd', ['--noEmit'], { stdio: 'inherit', shell: true });
+const tsc = spawnSync(process.execPath, ['node_modules/typescript/bin/tsc', '--noEmit'], { stdio: 'inherit' });
 if (tsc.status === 0) pass('TypeScript');
 else fail('TypeScript failed');
 

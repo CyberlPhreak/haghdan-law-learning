@@ -12,7 +12,7 @@ Official sample questions are used to understand format and assessment level. Th
 
 ## Content version
 
-The current curriculum structure targets the SRA specifications applicable from 1 September 2025 through 31 August 2026. Changes published for assessments from 1 September 2026 must be incorporated and re-reviewed before claiming coverage for that window.
+The current curriculum structure maps the SRA specifications applicable from 1 September 2025 through 31 August 2026 and the published changes taking effect on 1 September 2026. The 2026/27 material must still receive documented item-by-item legal review before any high-stakes completeness or accuracy claim is made for that assessment window.
 
 ## Required review before public commercial release
 

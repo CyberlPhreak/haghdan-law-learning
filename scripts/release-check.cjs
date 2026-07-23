@@ -72,9 +72,41 @@ const curriculum = fs.readFileSync('src/sqe.ts', 'utf8');
 const knowledge = fs.readFileSync('src/sqe-knowledge.ts', 'utf8');
 const sqeSpec = fs.readFileSync('src/sqe-spec.ts', 'utf8');
 const sqe2Stations = fs.readFileSync('src/sqe2-stations.ts', 'utf8');
+const sraCoverage = JSON.parse(fs.readFileSync('src/sra-coverage.json', 'utf8'));
 const unitRows = curriculum.match(/^\s+'[^'\n]+~[^'\n]+~[^'\n]+~[^'\n]+',?$/gm) || [];
 if (unitRows.length >= 100) pass(`Curriculum contains ${unitRows.length} structured units`);
 else fail(`Expected at least 100 curriculum units, found ${unitRows.length}`);
+const curriculumUnitIds = new Set(unitRows.map(row => row.trim().slice(1).split('~')[0]));
+const coverageIds = sraCoverage.requirements.map(requirement => requirement.id);
+const coverageUnitIds = new Set(sraCoverage.requirements.flatMap(requirement => requirement.unitIds || []));
+const allowedStationContexts = {
+  interview: ['property', 'wills'],
+  advocacy: ['dispute', 'criminal'],
+  analysis: ['dispute', 'criminal', 'property', 'wills', 'business'],
+  research: ['dispute', 'criminal', 'property', 'wills', 'business'],
+  writing: ['dispute', 'criminal', 'property', 'wills', 'business'],
+  drafting: ['dispute', 'criminal', 'property', 'wills', 'business'],
+};
+const stationIds = new Set(Object.entries(allowedStationContexts).flatMap(([skill, contexts]) => contexts.map(context => `station-${skill}-${context}`)));
+const invalidCoverageUnits = [...coverageUnitIds].filter(id => !curriculumUnitIds.has(id));
+const invalidCoverageStations = sraCoverage.requirements.flatMap(requirement => requirement.stationIds || []).filter(id => !stationIds.has(id));
+const uncoveredFlkUnits = [...curriculumUnitIds].slice(0, 89).filter(id => !coverageUnitIds.has(id));
+const assessmentCoverageCounts = Object.fromEntries(['FLK1', 'FLK2', 'SQE2'].map(assessment => [
+  assessment,
+  sraCoverage.requirements.filter(requirement => requirement.assessment === assessment).length,
+]));
+if (
+  sraCoverage.checkedAt === '2026-07-23'
+  && sraCoverage.requirements.length === 113
+  && new Set(coverageIds).size === coverageIds.length
+  && invalidCoverageUnits.length === 0
+  && invalidCoverageStations.length === 0
+  && uncoveredFlkUnits.length === 0
+  && assessmentCoverageCounts.FLK1 === 47
+  && assessmentCoverageCounts.FLK2 === 52
+  && assessmentCoverageCounts.SQE2 === 14
+) pass('All 113 named SRA FLK1, FLK2 and SQE2 coverage requirements map to live units or valid stations');
+else fail(`SRA coverage manifest is incomplete (requirements=${sraCoverage.requirements.length}, invalid units=${invalidCoverageUnits.join(',')}, invalid stations=${invalidCoverageStations.join(',')}, uncovered FLK units=${uncoveredFlkUnits.join(',')})`);
 const knowledgeEntries = knowledge.match(/^  "[^"]+": \[/gm) || [];
 if (knowledgeEntries.length === 89) pass('All 89 FLK units include substantive Persian rule notes');
 else fail('Expected substantive notes for 89 FLK units, found ' + knowledgeEntries.length);
@@ -90,7 +122,9 @@ if (navigationSource.includes("mode: 'fullMock'") && navigationSource.includes('
 else fail('Full two-session FLK simulation is incomplete');
 if (sqe2Stations.includes("'sqe2-interview': ['property', 'wills']") && sqe2Stations.includes("'sqe2-advocacy': ['dispute', 'criminal']") && sqe2Stations.includes("['dispute', 'criminal', 'property', 'wills', 'business']") && sqe2Stations.includes('sqe2StationLessons')) pass('SQE2 skills and five official practice contexts configured');
 else fail('SQE2 station/context coverage is incomplete');
-if (sqeSpec.includes("checkedAt: '2026-07-22'") && sqeSpec.includes('september2026Changes') && sqeSpec.includes('sqe1-annex4')) pass('Versioned SRA specification and September 2026 transition mapped');
+if (sqe2Stations.includes('negotiationStationIds') && ['station-interview-property', 'station-analysis-dispute', 'station-writing-dispute'].every(id => sqe2Stations.includes(`'${id}'`))) pass('SQE2 negotiation is practised through all three permitted assessment routes');
+else fail('SQE2 negotiation coverage is incomplete');
+if (sqeSpec.includes("checkedAt: '2026-07-23'") && sqeSpec.includes('september2026Changes') && sqeSpec.includes('sqe1-annex4')) pass('Versioned SRA specification and September 2026 transition mapped');
 else fail('SRA specification version mapping is incomplete');
 
 const tsc = spawnSync(process.execPath, ['node_modules/typescript/bin/tsc', '--noEmit'], { stdio: 'inherit' });

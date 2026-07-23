@@ -1,13 +1,13 @@
 # SRA SQE coverage audit
 
-Checked on 22 July 2026 against the official SRA/Kaplan SQE assessment pages. This is a scope and format mapping, not SRA approval and not a substitute for item-by-item legal editorial review.
+Checked on 23 July 2026 against the official SRA/Kaplan SQE assessment pages. This is a scope and format mapping, not SRA approval and not a substitute for item-by-item legal editorial review.
 
 ## Specification versions
 
 - Current specification: applicable to assessments from 1 September 2025 through 31 August 2026.
 - Published next specification: applicable from 1 September 2026; first used for the October 2026 SQE2 assessment.
 - Law and practice cut-off: four calendar months before the first assessment in the relevant assessment window.
-- The app includes the published September 2026 transition points: supplied monetary tax values, clearer SQE2 application/research guidance, Property Practice money-laundering coverage, and a separate SQE2 ethics feedback category.
+- The app includes the published September 2026 transition points: supplied monetary tax values, clearer SQE2 application/research guidance, Property Practice money-laundering coverage, a separate SQE2 ethics feedback category, and every detailed FLK1/FLK2 clarification listed in the annual review.
 
 Official sources:
 
@@ -59,6 +59,15 @@ Solicitors Accounts is taught as a visible pathway for learning, but mock select
 - Knowing receipt, dishonest assistance and third-party trust liability.
 - Trusts of the family home, including sole/joint title and quantification.
 - Solicitors Accounts questions contextualised across property completion and estate administration.
+- September 2026 Business clarifications on entity scope, share redemption/buyback and Corporation Tax.
+- September 2026 Property clarifications on search results, sale/assignment contract drafting, exchange formulae, apportionments and LTA 1954 Part II contracting out.
+- September 2026 Wills and Probate clarifications on proof of validity, executor eligibility, NCPR priority/evidence, PR duties/protection, IHT incidence and 1975 Act factors.
+- September 2026 Trusts clarifications on Re Rose, Strong v Bird, Choithram, and automatic versus presumed resulting trusts.
+- September 2026 Criminal Practice clarifications on PACE Code C interviews, bail applications/opposition, hearsay challenges, bad/good character, Newton hearings and youth procedure/sentencing.
+
+## Machine-enforced coverage control
+
+`src/sra-coverage.json` records 113 named requirements: 47 FLK1, 52 FLK2 and 14 SQE2. Each requirement maps to one or more live learning units or a valid SQE2 station. The release check now fails for duplicate requirement IDs, missing unit references, invalid station references, an uncovered FLK unit, a missing assessment group, or loss of SQE2 negotiation practice.
 
 ## SQE1 assessment simulation
 
@@ -87,6 +96,7 @@ The station library contains 24 timed, original practice packs:
 - Oral: Property and Wills interviews; Dispute Resolution and Criminal Litigation advocacy.
 - Written: analysis, research, writing and drafting across Dispute Resolution, Criminal Litigation, Property Practice, Wills/Probate and Business Organisations.
 - Each station includes a file brief, issues, official timing, planning checklist, skills criteria, application-of-law checks, ethics review and self-mark rubric.
+- Negotiation is expressly practised in interview/attendance note, case and matter analysis, and legal writing. At least one negotiation exercise is therefore present through every route in which the SRA says negotiation may be assessed.
 
 The live SQE2 assessment contains four oral and twelve written assessments. The app provides a broader practice library so a learner can rehearse every valid skill/context combination; it does not claim to predict the exact station combination in a sitting.
 

@@ -34,6 +34,7 @@ export type Sqe2Station = {
   task: string;
   issues: string[];
   criteria: string[];
+  includesNegotiation: boolean;
 };
 
 const practiceAreas: PracticeArea[] = [
@@ -111,10 +112,18 @@ const allowedAreas: Record<SkillId, PracticeAreaId[]> = {
   'sqe2-drafting': ['dispute', 'criminal', 'property', 'wills', 'business'],
 };
 
+const negotiationStationIds = new Set([
+  'station-interview-property',
+  'station-analysis-dispute',
+  'station-writing-dispute',
+]);
+
 export const sqe2Stations: Sqe2Station[] = skills.flatMap((skill) => allowedAreas[skill.id].map((areaId) => {
   const area = practiceAreas.find((item) => item.id === areaId)!;
+  const id = `station-${skill.id.replace('sqe2-', '')}-${area.id}`;
+  const includesNegotiation = negotiationStationIds.has(id);
   return {
-    id: `station-${skill.id.replace('sqe2-', '')}-${area.id}`,
+    id,
     skillId: skill.id,
     practiceAreaId: area.id,
     title: `${skill.fa} · ${area.fa}`,
@@ -123,8 +132,13 @@ export const sqe2Stations: Sqe2Station[] = skills.flatMap((skill) => allowedArea
     format: skill.format,
     brief: area.file,
     task: skill.task,
-    issues: [...area.issues, area.foundation],
+    issues: [
+      ...area.issues,
+      area.foundation,
+      ...(includesNegotiation ? ['Negotiation: objectives, BATNA, authority, opening position, concessions, settlement terms and ethics'] : []),
+    ],
     criteria: skill.criteria,
+    includesNegotiation,
   };
 }));
 
@@ -195,7 +209,7 @@ export const sqe2StationLessons: Lesson[] = sqe2Stations.map((station) => ({
       title: 'Rubric خودارزیابی',
       body: 'هر معیار را از A تا F ارزیابی و برای هر ضعف یک اصلاح مشخص بنویسید. skills و application of law در نتیجه کلی SQE2 وزن برابر دارند.',
       bullets: station.criteria,
-      checklist: ['آیا همه facts مهم آمده‌اند؟', 'آیا law درست و جامع اعمال شده است؟', 'آیا advice برای هدف client مفید است؟', 'آیا مسئله ethical شناسایی و حل شده است؟', 'آیا خروجی روشن، مختصر و قابل اقدام است؟'],
+      checklist: ['آیا همه facts مهم آمده‌اند؟', 'آیا law درست و جامع اعمال شده است؟', 'آیا advice برای هدف client مفید است؟', ...(station.includesNegotiation ? ['Check authority, objectives, concessions, settlement terms and implementation risk.'] : []), 'آیا مسئله ethical شناسایی و حل شده است؟', 'آیا خروجی روشن، مختصر و قابل اقدام است؟'],
       source: 'Mapped to the SRA SQE2 Assessment Specification applicable from 1 September 2025 and published 2026 transition changes.',
       callout: 'این scenario تألیفی حق‌دان است و سؤال رسمی یا past paper نیست.',
       termFa: 'معیار ارزیابی',

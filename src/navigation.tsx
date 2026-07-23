@@ -449,8 +449,8 @@ function Home() {
     <Page>
       <Header eyebrow={t('home.eyebrow')} title={t('home.greeting', { name: state.name })} subtitle={t('home.subtitle')} />
       <View style={s.hero}>
-        <View pointerEvents="none" style={s.heroGlow} />
-        <View pointerEvents="none" style={s.heroGlowSmall} />
+        <View style={s.heroGlow} />
+        <View style={s.heroGlowSmall} />
         <View style={s.heroCopy}>
           <Pill icon="zap" text={t('home.today')} />
           <Text style={s.heroTitle}>{legalTitle(next.title, next.englishTitle)}</Text>
@@ -490,7 +490,7 @@ function GameStatusCard({ game, onPress }: { game: GameProfile; onPress: () => v
   const levelTitle = t(`game.level.${game.level.level}`);
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`${t('game.club')}, ${t('common.level')} ${formatNumber(game.level.level)}, ${levelTitle}`} onPress={onPress} style={({ pressed }) => [s.gameStatus, pressed && s.cardPressed]}>
-      <View pointerEvents="none" style={s.gameStatusGlow} />
+      <View style={s.gameStatusGlow} />
       <View style={s.gameStatusTop}>
         <View style={s.levelMedallion}><Feather name={game.level.icon} size={23} color={palette.goldInk} /></View>
         <View style={s.flexEnd}><Text style={s.gameEyebrow}>{t('game.club')} · {t('common.level')} {formatNumber(game.level.level)}</Text><Text style={s.gameStatusTitle}>{levelTitle}</Text></View>
@@ -523,7 +523,7 @@ function GameHubScreen({ navigation }: GameHubProps) {
         <TopBar onBack={navigation.goBack} />
         <MotionView style={s.gameScreenMotion} distance={14} duration={motion.relaxed}>
           <View style={s.gameHero}>
-            <View pointerEvents="none" style={s.gameHeroGlow} />
+            <View style={s.gameHeroGlow} />
             <View style={s.gameHeroMedallion}><Feather name={game.level.icon} size={34} color={palette.goldInk} /></View>
             <View style={s.gameHeroCopy}>
               <Text style={s.gameHeroEyebrow}>{t('common.level')} {formatNumber(game.level.level)} · {formatNumber(game.xp)} XP</Text>
@@ -749,7 +749,7 @@ function QuizCard({ question, selected, revealed, combo = 0, onSelect }: { quest
 
 function CelebrationBurst({ icon, tone }: { icon: IconName; tone: 'success' | 'gold' }) {
   const color = tone === 'success' ? palette.success : palette.saffron;
-  return <View style={s.celebrationStage} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none">
+  return <View style={s.celebrationStage} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
     {[s.sparkOne, s.sparkTwo, s.sparkThree, s.sparkFour, s.sparkFive, s.sparkSix].map((position, index) => <MotionView key={index} style={[s.celebrationSpark, position]} delay={index * 35} distance={index % 2 ? 10 : -10} duration={motion.standard}><Feather name={index % 2 ? 'star' : 'circle'} size={index % 2 ? 17 : 10} color={index % 3 ? palette.saffron : palette.primary} /></MotionView>)}
     <MotionView style={[s.resultIcon, { backgroundColor: color }]} distance={12} duration={motion.relaxed}><Feather name={icon} size={38} color={palette.white} /></MotionView>
   </View>;
@@ -925,7 +925,7 @@ function InsightsScreen({ navigation }: InsightsProps) {
         <TopBar onBack={navigation.goBack} />
         <MotionView style={s.insightsMotion} distance={14} duration={motion.relaxed}>
           <View style={s.insightsHero}>
-            <View pointerEvents="none" style={s.insightsGlow} />
+            <View style={s.insightsGlow} />
             <View style={s.readinessScore}><Text style={s.readinessNumber}>{formatNumber(analytics.readiness)}%</Text><Text style={s.readinessCaption}>{t('insights.index')}</Text></View>
             <View style={s.insightsHeroCopy}><View style={s.insightsBadge}><Feather name="activity" size={15} color={palette.goldInk} /><Text style={s.insightsBadgeText}>{readinessLabel}</Text></View><Text style={s.insightsTitle}>{t('insights.reportTitle')}</Text><Text style={s.insightsSubtitle}>{t('insights.reportSubtitle')}</Text><View style={s.readinessProgress}><ProgressBar value={analytics.readiness} color={palette.saffron} trackColor={palette.overlayBorder} /></View><Text style={s.readinessTarget}>{t('insights.target')}</Text></View>
           </View>
@@ -1265,6 +1265,11 @@ function PathCard({ item, onPress }: { item: Pathway; onPress: () => void }) {
   const complete = item.lessonIds.filter((id) => state.completedLessons.includes(id)).length;
   const percent = Math.round((complete / item.lessonIds.length) * 100);
   const progressLabel = percent ? `${formatNumber(percent)}% ${t('common.completed')}` : t('common.notStarted');
+  const levelLabel = item.track === 'SQE2'
+    ? t('learn.level.practical')
+    : item.track
+      ? item.level
+      : t(item.id === 'immigration' ? 'learn.level.beginnerIntermediate' : ['housing', 'police'].includes(item.id) ? 'learn.level.applied' : 'learn.level.beginner');
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`${legalTitle(item.title, item.englishTitle)}, ${progressLabel}`} onPress={onPress} style={({ pressed }) => [s.pathCard, pressed && s.pathCardPressed]}>
       <ImageBackground source={subjectArtFor(item.id)} resizeMode="cover" style={s.pathArtwork} imageStyle={s.pathArtworkImage} accessible={false} accessibilityIgnoresInvertColors>
@@ -1274,7 +1279,7 @@ function PathCard({ item, onPress }: { item: Pathway; onPress: () => void }) {
         <View style={s.pathCardContent}>
           <View style={s.between}>
             <View style={s.pathIconOnImage}><Feather name={item.icon} size={22} color={palette.white} /></View>
-            <View style={s.pathLevel}><Text style={s.pathLevelText}>{item.level}</Text></View>
+            <View style={s.pathLevel}><Text style={s.pathLevelText}>{levelLabel}</Text></View>
           </View>
           <View style={s.pathCopyOnImage}>
             <Text style={s.pathTitleOnImage}>{legalTitle(item.title, item.englishTitle)}</Text>
@@ -1376,8 +1381,8 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   goalNumber: { color: palette.ink, fontSize: 20, fontFamily: type.latinBold },
   goalNumberActive: { color: palette.primary },
   hero: { position: 'relative', overflow: 'hidden', flexDirection: rowDirection, flexWrap: 'wrap', gap: 22, padding: 23, borderWidth: 1, borderColor: palette.line, borderRadius: radius.xl, backgroundColor: palette.surface, ...shadow },
-  heroGlow: { position: 'absolute', width: 260, height: 260, borderRadius: 130, top: -150, left: -80, backgroundColor: palette.primarySoft, opacity: 0.72 },
-  heroGlowSmall: { position: 'absolute', width: 120, height: 120, borderRadius: 60, bottom: -70, right: 120, backgroundColor: palette.saffronSoft, opacity: 0.62 },
+  heroGlow: { position: 'absolute', width: 260, height: 260, borderRadius: 130, top: -150, left: -80, backgroundColor: palette.primarySoft, opacity: 0.72, pointerEvents: 'none' },
+  heroGlowSmall: { position: 'absolute', width: 120, height: 120, borderRadius: 60, bottom: -70, right: 120, backgroundColor: palette.saffronSoft, opacity: 0.62, pointerEvents: 'none' },
   heroCopy: { flex: 2, minWidth: 260, alignItems: logicalEnd, gap: 8 },
   heroTitle: { color: palette.ink, fontSize: 26, lineHeight: 38, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
   goalCard: { flex: 1, minWidth: 180, minHeight: 210, padding: 20, borderRadius: radius.lg, backgroundColor: palette.brandSurface, alignItems: 'center', justifyContent: 'center', gap: 7 },
@@ -1578,7 +1583,7 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   insightsPage: { width: '100%', maxWidth: 1080 },
   insightsMotion: { width: '100%', gap: 25 },
   insightsHero: { position: 'relative', overflow: 'hidden', minHeight: 265, flexDirection: rowDirection, flexWrap: 'wrap', alignItems: 'center', gap: 25, padding: 27, borderRadius: radius.xl, backgroundColor: palette.brandSurface, ...shadow },
-  insightsGlow: { position: 'absolute', width: 330, height: 330, borderRadius: 165, left: -145, bottom: -185, backgroundColor: palette.primaryAction, opacity: 0.42 },
+  insightsGlow: { position: 'absolute', width: 330, height: 330, borderRadius: 165, left: -145, bottom: -185, backgroundColor: palette.primaryAction, opacity: 0.42, pointerEvents: 'none' },
   readinessScore: { width: 158, minHeight: 158, borderRadius: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.overlaySurface, borderWidth: 1, borderColor: palette.overlayBorder },
   readinessNumber: { color: palette.white, fontSize: 43, fontFamily: type.latinBold },
   readinessCaption: { color: palette.onPrimaryMuted, fontSize: 11, fontWeight: '800', writingDirection: 'rtl', marginTop: 5 },
@@ -1660,7 +1665,7 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   translationInlineText: { flex: 1, color: palette.primaryDark, fontSize: 11, lineHeight: 19 },
   cardPressed: { opacity: 0.9, borderColor: palette.pressBorder, transform: [{ scale: 0.992 }] },
   gameStatus: { position: 'relative', overflow: 'hidden', gap: 14, padding: 20, borderRadius: radius.xl, backgroundColor: palette.brandSurface, ...shadow },
-  gameStatusGlow: { position: 'absolute', width: 230, height: 230, borderRadius: 115, left: -90, bottom: -150, backgroundColor: palette.primaryAction, opacity: 0.45 },
+  gameStatusGlow: { position: 'absolute', width: 230, height: 230, borderRadius: 115, left: -90, bottom: -150, backgroundColor: palette.primaryAction, opacity: 0.45, pointerEvents: 'none' },
   gameStatusTop: { flexDirection: rowDirection, alignItems: 'center', gap: 13 },
   levelMedallion: { width: 54, height: 54, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.saffronSoft, borderWidth: 1, borderColor: palette.borderGold },
   gameEyebrow: { color: palette.saffron, fontSize: 11, lineHeight: 18, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
@@ -1675,7 +1680,7 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   gamePage: { width: '100%', maxWidth: 980, alignSelf: 'center', padding: 20, paddingBottom: 70, gap: 20 },
   gameScreenMotion: { width: '100%', gap: 24 },
   gameHero: { position: 'relative', overflow: 'hidden', minHeight: 220, flexDirection: rowDirection, flexWrap: 'wrap', alignItems: 'center', gap: 22, padding: 25, borderRadius: radius.xl, backgroundColor: palette.brandSurface, ...shadow },
-  gameHeroGlow: { position: 'absolute', width: 310, height: 310, borderRadius: 155, left: -120, bottom: -190, backgroundColor: palette.primaryAction, opacity: 0.5 },
+  gameHeroGlow: { position: 'absolute', width: 310, height: 310, borderRadius: 155, left: -120, bottom: -190, backgroundColor: palette.primaryAction, opacity: 0.5, pointerEvents: 'none' },
   gameHeroMedallion: { width: 92, height: 92, borderRadius: 31, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.saffronSoft, borderWidth: 2, borderColor: palette.borderGold },
   gameHeroCopy: { flex: 1, minWidth: 230, alignItems: logicalEnd, gap: 5 },
   gameHeroEyebrow: { color: palette.saffron, fontSize: 12, lineHeight: 20, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
@@ -1715,7 +1720,7 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   quizHeader: { width: '100%', flexDirection: rowDirection, alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   comboPill: { minHeight: 36, flexDirection: rowDirection, alignItems: 'center', gap: 6, paddingHorizontal: 12, borderRadius: radius.round, backgroundColor: palette.saffronSoft, borderWidth: 1, borderColor: palette.borderGold },
   comboText: { color: palette.goldInk, fontSize: 12, lineHeight: 18, fontWeight: '900', writingDirection: 'rtl' },
-  celebrationStage: { position: 'relative', width: 150, height: 104, alignItems: 'center', justifyContent: 'center' },
+  celebrationStage: { position: 'relative', width: 150, height: 104, alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' },
   celebrationSpark: { position: 'absolute', width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
   sparkOne: { top: 5, left: 13 },
   sparkTwo: { top: 1, right: 15 },

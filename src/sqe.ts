@@ -529,9 +529,10 @@ const shuffleQuestions = (items: SqeQuestion[]) => {
 
 export const buildBalancedTestQuestions = (stage: SqeStage, count: number, subjectId?: string) => {
   const pool = questionsForStage(stage);
-  if (subjectId) return shuffleQuestions(pool.filter((question) => question.subjectId === subjectId)).slice(0, count);
+  const safeCount = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+  if (subjectId) return shuffleQuestions(pool.filter((question) => question.subjectId === subjectId)).slice(0, safeCount);
 
-  const allocations = allocateBlueprintCounts(stage, Math.min(count, pool.length));
+  const allocations = allocateBlueprintCounts(stage, Math.min(safeCount, pool.length));
   const selected = Object.entries(allocations).flatMap(([allocatedSubjectId, allocatedCount]) =>
     shuffleQuestions(pool.filter((question) => question.subjectId === allocatedSubjectId)).slice(0, allocatedCount),
   );

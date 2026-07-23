@@ -1,5 +1,5 @@
 import { createContext, createElement, useContext, useMemo, type ReactNode } from 'react';
-import { useColorScheme } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
 
 import type { ThemeMode } from './store';
 
@@ -188,12 +188,14 @@ export const type = {
   latinBold: 'Manrope_700Bold',
 };
 
-export const createShadow = (colors: AppPalette) => ({
-  shadowColor: colors.shadow,
-  shadowOffset: { width: 0, height: 12 },
-  shadowOpacity: colors === darkPalette ? 0.28 : 0.09,
-  shadowRadius: 24,
-  elevation: 5,
-});
+export const createShadow = (colors: AppPalette) => Platform.OS === 'web'
+  ? { boxShadow: colors === darkPalette ? '0 12px 24px rgba(0,0,0,0.28)' : '0 12px 24px rgba(47,38,122,0.09)' }
+  : {
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 12 },
+      shadowOpacity: colors === darkPalette ? 0.28 : 0.09,
+      shadowRadius: 24,
+      elevation: 5,
+    };
 
 export const shadow = createShadow(lightPalette);

@@ -95,6 +95,7 @@ Google OAuth and email recovery use the `haghdan` custom URL scheme. Expo Go can
 
 ```powershell
 npm run typecheck
+npm test
 npm run release:check
 npm run export:web
 npx expo-doctor

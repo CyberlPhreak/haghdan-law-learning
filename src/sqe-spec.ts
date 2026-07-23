@@ -69,12 +69,13 @@ export const examSubjectTargets: Record<SqeStage, Record<string, number>> = {
 };
 
 export const allocateBlueprintCounts = (stage: SqeStage, total: number) => {
+  const safeTotal = Number.isFinite(total) ? Math.max(0, Math.min(180, Math.floor(total))) : 0;
   const targets = examSubjectTargets[stage];
   const entries = Object.entries(targets).map(([subjectId, fullCount], order) => {
-    const exact = (fullCount / 180) * total;
+    const exact = (fullCount / 180) * safeTotal;
     return { subjectId, order, count: Math.floor(exact), remainder: exact - Math.floor(exact) };
   });
-  let remaining = total - entries.reduce((sum, item) => sum + item.count, 0);
+  let remaining = safeTotal - entries.reduce((sum, item) => sum + item.count, 0);
   [...entries]
     .sort((a, b) => b.remainder - a.remainder || a.order - b.order)
     .forEach((item) => {

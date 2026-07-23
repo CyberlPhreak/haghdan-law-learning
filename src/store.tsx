@@ -512,6 +512,12 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    if (!supabase) {
+      const signedOut = { ...stateRef.current, authenticated: false };
+      stateRef.current = signedOut;
+      setState(signedOut);
+      return;
+    }
     if (supabase) await supabase.auth.signOut();
     const current = stateRef.current;
     const cleared = {

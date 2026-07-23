@@ -3,12 +3,13 @@ import * as Haptics from 'expo-haptics';
 import { DefaultTheme, NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator, type NativeStackNavigationProp, type NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Alert,
   ImageBackground,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -20,6 +21,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { buildLearningAnalytics, type LearningAnalytics, type SubjectInsight } from './analytics';
+import { askStudyAssistant, assistantSuggestions, onlineAssistantConfigured, privacySafeLearnerId, type ChatMessage } from './ai-chat';
 import { normalizeUsername, validatePin, validateUsername } from './auth';
 import { ActionButton, Brand, ProgressBar } from './components';
 import { glossary, lessonById, lessons, pathwayById, pathways, type IconName, type Lesson, type Pathway, type QuizQuestion } from './curriculum';
@@ -27,6 +29,7 @@ import { buildGameProfile, gameLevels, lessonXp, localDateKey, testXp, type Achi
 import { languageOptions, LocalizedText as Text, useI18n, type AppLanguage } from './i18n';
 import { localizeLesson, localizeQuestion } from './legal-content';
 import { MotionView, motion } from './motion';
+import { legalDocuments, product, type LegalDocumentId } from './product';
 import { buildBalancedTestQuestions, sqeTotals, stageSubjects, type SqeStage, type SqeTrack } from './sqe';
 import { sraSpecification } from './sqe-spec';
 import { SoundPressable as Pressable, useSoundFeedback } from './sound';
@@ -41,6 +44,9 @@ export type RootStackParamList = {
   Test: { stage: SqeStage; count: number; mode: TestMode; subjectId?: string };
   Insights: undefined;
   GameHub: undefined;
+  AIChat: undefined;
+  Support: undefined;
+  Legal: { document: LegalDocumentId };
 };
 
 type TabParams = {
@@ -83,6 +89,9 @@ export function HaghDanApp() {
         <Root.Screen name="Test" component={TestScreen} />
         <Root.Screen name="Insights" component={InsightsScreen} />
         <Root.Screen name="GameHub" component={GameHubScreen} />
+        <Root.Screen name="AIChat" component={AIChatScreen} />
+        <Root.Screen name="Support" component={SupportScreen} />
+        <Root.Screen name="Legal" component={LegalScreen} />
       </Root.Navigator>
     </NavigationContainer>
   );
@@ -231,6 +240,10 @@ function Authentication() {
                 <View style={[s.checkbox, termsAccepted && s.checkboxChecked]}>{termsAccepted ? <Feather name="check" size={15} color={palette.white} /> : null}</View>
                 <Text style={s.termsText}>{t('auth.terms')}</Text>
               </Pressable>
+              <View style={s.authLegalLinks}>
+                <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(product.termsUrl)}><Text style={s.inlineLink}>{t('support.terms')}</Text></Pressable>
+                <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(product.privacyUrl)}><Text style={s.inlineLink}>{t('support.privacy')}</Text></Pressable>
+              </View>
               <FieldError message={errors.terms} />
             </> : null}
 
@@ -280,12 +293,24 @@ function Home() {
         <View style={s.goalCard}><View style={s.goalIcon}><Feather name="book-open" size={28} color={palette.white} /></View><Text style={s.goalBig}>{formatNumber(completedToday)}/{formatNumber(state.dailyGoal)}</Text><Text style={s.goalCaption}>{t('home.dailyGoal')}</Text><View style={s.goalProgress}><ProgressBar value={(completedToday / state.dailyGoal) * 100} color={palette.white} trackColor={palette.overlayBorder} /></View></View>
       </View>
       <GameStatusCard game={game} onPress={() => nav.navigate('GameHub')} />
+      <AssistantPromo onPress={() => nav.navigate('AIChat')} />
       <View style={s.stats}><Stat icon="award" value={formatNumber(mastery) + '%'} label={t('home.mastery')} color={palette.primary} soft={palette.primarySoft} /><Stat icon="check-circle" value={formatNumber(state.completedLessons.length)} label={t('home.complete')} color={palette.teal} soft={palette.tealSoft} /><Stat icon="refresh-cw" value={formatNumber(due)} label={t('home.reviewReady')} color={palette.rose} soft={palette.roseSoft} /><Stat icon="activity" value={formatNumber(streak)} label={t('home.streak')} color={palette.goldInk} soft={palette.saffronSoft} /></View>
       <HomeInsights analytics={analytics} onPress={() => nav.navigate('Insights')} />
       <SectionTitle title={t('home.pathways')} />
       <View style={s.grid}>{pathways.slice(0, 3).map((item) => <PathCard key={item.id} item={item} onPress={() => nav.navigate('Pathway', { pathwayId: item.id })} />)}</View>
       <Notice />
     </Page>
+  );
+}
+
+function AssistantPromo({ onPress }: { onPress: () => void }) {
+  const { t } = useI18n();
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={t('home.assistant')} onPress={onPress} style={({ pressed }) => [s.assistantPromo, pressed && s.cardPressed]}>
+      <View style={s.assistantPromoIcon}><Feather name="message-circle" size={23} color={palette.white} /></View>
+      <View style={s.flexEnd}><Text style={s.assistantPromoTitle}>{t('home.assistant')}</Text><Text style={s.assistantPromoText}>{t('home.assistantBody')}</Text></View>
+      <DirectionalChevron size={23} color={palette.primary} />
+    </Pressable>
   );
 }
 
@@ -797,6 +822,7 @@ function SubjectBullet({ item }: { item: SubjectInsight }) {
 }
 
 function Profile() {
+  const nav = useRootNav();
   const { state, streak, updateSettings, signOut, resetProgress } = useLearner();
   const { previewTap } = useSoundFeedback();
   const { t, formatNumber, isRtl } = useI18n();
@@ -854,10 +880,144 @@ function Profile() {
         <View style={s.settingRow}><View style={s.iconSmall}><Feather name="lock" size={19} color={palette.teal} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>{t('profile.offlinePrivacy')}</Text><Text style={s.hint}>PIN · offline-first · no analytics SDK</Text></View></View>
         <View style={s.settingRow}><View style={s.iconSmall}><Feather name="alert-circle" size={19} color={palette.rose} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>{t('profile.independent')}</Text><Text style={s.hint}>{t('profile.independentDetail')}</Text></View></View>
       </View>
+      <View style={s.settings}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('assistant.title')} onPress={() => nav.navigate('AIChat')} style={({ pressed }) => [s.supportEntry, pressed && s.pressed]}><View style={s.iconSmall}><Feather name="message-circle" size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.modeTitle}>{t('assistant.title')}</Text><Text style={s.hint}>{onlineAssistantConfigured ? t('assistant.online') : t('assistant.offline')}</Text></View><DirectionalChevron size={20} color={palette.muted} /></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('support.title')} onPress={() => nav.navigate('Support')} style={({ pressed }) => [s.supportEntry, pressed && s.pressed]}><View style={s.iconSmall}><Feather name="help-circle" size={19} color={palette.teal} /></View><View style={s.flexEnd}><Text style={s.modeTitle}>{t('support.title')}</Text><Text style={s.hint}>{t('support.subtitle')}</Text></View><DirectionalChevron size={20} color={palette.muted} /></Pressable>
+      </View>
       <Pressable accessibilityRole="button" accessibilityLabel={t('profile.signOut')} onPress={signOut} style={({ pressed }) => [s.signOut, pressed && s.pressed]}><Feather name="log-out" size={18} color={palette.primary} /><Text style={s.signOutText}>{t('profile.signOut')}</Text></Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel={t('profile.reset')} onPress={reset} style={({ pressed }) => [s.danger, pressed && s.pressed]}><Feather name="trash-2" size={18} color={palette.rose} /><Text style={s.dangerText}>{t('profile.reset')}</Text></Pressable>
       <Notice />
     </Page>
+  );
+}
+
+type AIChatProps = NativeStackScreenProps<RootStackParamList, 'AIChat'>;
+function AIChatScreen({ navigation }: AIChatProps) {
+  const { state } = useLearner();
+  const { t, language, isRtl } = useI18n();
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const scroll = useRef<ScrollView>(null);
+  useEffect(() => {
+    requestAnimationFrame(() => scroll.current?.scrollToEnd({ animated: true }));
+  }, [messages, busy]);
+
+  const send = async (suggested?: string) => {
+    const text = (suggested ?? input).trim();
+    if (!text || busy) return;
+    if (text.length > 2_000) {
+      setError(t('assistant.tooLong'));
+      return;
+    }
+    const userMessage: ChatMessage = { id: `user-${Date.now()}`, role: 'user', text };
+    const nextMessages = [...messages, userMessage];
+    setMessages(nextMessages);
+    setInput('');
+    setError('');
+    setBusy(true);
+    try {
+      const answer = await askStudyAssistant({
+        messages: nextMessages,
+        language,
+        safetyId: privacySafeLearnerId(state.username),
+      });
+      setMessages((current) => [...current, { id: `assistant-${Date.now()}`, role: 'assistant', ...answer }]);
+    } catch {
+      setError(t('assistant.error'));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const clear = () => Alert.alert(t('assistant.clearTitle'), t('assistant.clearBody'), [
+    { text: t('profile.cancel'), style: 'cancel' },
+    { text: t('assistant.clear'), style: 'destructive', onPress: () => { setMessages([]); setError(''); } },
+  ]);
+
+  return (
+    <SafeAreaView style={s.safe}>
+      <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={s.chatPage}>
+          <TopBar onBack={navigation.goBack} />
+          <View style={s.chatHeading}>
+            <View style={s.chatHeadingIcon}><Feather name="message-circle" size={24} color={palette.white} /></View>
+            <View style={s.flexEnd}><Text style={s.eyebrow}>{t('assistant.eyebrow')}</Text><Text style={s.pageTitle}>{t('assistant.title')}</Text><Text style={s.body}>{t('assistant.subtitle')}</Text></View>
+          </View>
+          <View style={s.assistantMode}><Feather name={onlineAssistantConfigured ? 'cloud' : 'book-open'} size={16} color={onlineAssistantConfigured ? palette.teal : palette.goldInk} /><Text style={s.assistantModeText}>{onlineAssistantConfigured ? t('assistant.online') : t('assistant.offline')}</Text></View>
+          <View style={s.assistantPrivacy}><Feather name="shield" size={17} color={palette.rose} /><Text style={s.assistantPrivacyText}>{t('assistant.privacy')}</Text></View>
+          <ScrollView ref={scroll} style={s.chatMessages} contentContainerStyle={s.chatMessagesContent} keyboardShouldPersistTaps="handled">
+            {!messages.length ? <View style={s.chatEmpty}><Text style={s.centerBody}>{t('assistant.empty')}</Text><Text style={s.label}>{t('assistant.suggestions')}</Text><View style={s.suggestionList}>{assistantSuggestions[language].map((suggestion) => <Pressable key={suggestion} accessibilityRole="button" onPress={() => void send(suggestion)} style={({ pressed }) => [s.suggestion, pressed && s.pressed]}><Text style={s.suggestionText}>{suggestion}</Text><DirectionalChevron size={17} color={palette.primary} /></Pressable>)}</View></View> : null}
+            {messages.map((message) => <View key={message.id} style={[s.chatBubble, message.role === 'user' ? s.chatBubbleUser : s.chatBubbleAssistant]}><Text style={[s.chatBubbleText, message.role === 'user' && s.chatBubbleTextUser]}>{message.text}</Text>{message.role === 'assistant' ? <Text style={s.chatSource}>{message.mode === 'online' ? t('assistant.online') : t('assistant.offline')}</Text> : null}</View>)}
+            {busy ? <View style={[s.chatBubble, s.chatBubbleAssistant, s.chatTyping]}><ActivityIndicator color={palette.primary} /><Text style={s.hint}>{t('common.loading')}</Text></View> : null}
+            {error ? <FieldError message={error} /> : null}
+          </ScrollView>
+          <View style={s.chatComposer}>
+            <TextInput value={input} onChangeText={(value) => { setInput(value); setError(''); }} placeholder={t('assistant.placeholder')} placeholderTextColor={palette.muted} multiline maxLength={2_000} textAlign={isRtl ? 'right' : 'left'} style={s.chatInput} accessibilityLabel={t('assistant.placeholder')} />
+            <Pressable accessibilityRole="button" accessibilityLabel={t('assistant.send')} accessibilityState={{ disabled: busy || !input.trim() }} disabled={busy || !input.trim()} onPress={() => void send()} style={({ pressed }) => [s.chatSend, (busy || !input.trim()) && s.disabled, pressed && s.pressed]}><Feather name={isRtl ? 'arrow-left' : 'arrow-right'} size={20} color={palette.white} /></Pressable>
+          </View>
+          {messages.length ? <Pressable accessibilityRole="button" onPress={clear} style={({ pressed }) => [s.chatClear, pressed && s.pressed]}><Feather name="trash-2" size={15} color={palette.muted} /><Text style={s.hint}>{t('assistant.clear')}</Text></Pressable> : null}
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const openExternal = async (url: string) => {
+  if (await Linking.canOpenURL(url)) await Linking.openURL(url);
+};
+
+type SupportProps = NativeStackScreenProps<RootStackParamList, 'Support'>;
+function SupportScreen({ navigation }: SupportProps) {
+  const { resetProgress } = useLearner();
+  const { t } = useI18n();
+  const erase = () => Alert.alert(t('auth.resetLocalTitle'), t('support.deleteBody'), [
+    { text: t('profile.cancel'), style: 'cancel' },
+    { text: t('auth.resetLocalAction'), style: 'destructive', onPress: () => void resetProgress() },
+  ]);
+  return (
+    <SafeAreaView style={s.safe}>
+      <ScrollView contentContainerStyle={s.detailPage}>
+        <TopBar onBack={navigation.goBack} />
+        <Header eyebrow={t('support.eyebrow')} title={t('support.title')} subtitle={t('support.subtitle')} />
+        <View style={s.supportGroup}>
+          <SupportRow icon="help-circle" title={t('support.contact')} body={t('support.contactBody')} onPress={() => void openExternal(product.supportUrl)} />
+          <SupportRow icon="alert-triangle" title={t('support.report')} body={t('support.reportBody')} onPress={() => void openExternal(product.contentReportUrl)} />
+          <SupportRow icon="shield" title={t('support.privacyRequest')} body={t('support.privacyRequestBody')} onPress={() => void openExternal(product.privacyRequestUrl)} />
+        </View>
+        <View style={s.supportGroup}>
+          <SupportRow icon="lock" title={t('support.privacy')} body={t('support.readInApp')} onPress={() => navigation.navigate('Legal', { document: 'privacy' })} />
+          <SupportRow icon="file-text" title={t('support.terms')} body={t('support.readInApp')} onPress={() => navigation.navigate('Legal', { document: 'terms' })} />
+          <SupportRow icon="copy" title={t('support.rights')} body={t('support.readInApp')} onPress={() => navigation.navigate('Legal', { document: 'rights' })} />
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('support.delete')} onPress={erase} style={({ pressed }) => [s.dangerSupport, pressed && s.pressed]}><Feather name="trash-2" size={18} color={palette.rose} /><View style={s.flexEnd}><Text style={s.dangerText}>{t('support.delete')}</Text><Text style={s.hint}>{t('support.deleteBody')}</Text></View></Pressable>
+        <Text style={s.supportVersion}>{t('support.version', { version: product.version })} · {product.copyright}</Text>
+        <Notice />
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function SupportRow({ icon, title, body, onPress }: { icon: IconName; title: string; body: string; onPress: () => void }) {
+  return <Pressable accessibilityRole="button" accessibilityLabel={title} onPress={onPress} style={({ pressed }) => [s.supportRow, pressed && s.pressed]}><View style={s.iconSmall}><Feather name={icon} size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.modeTitle}>{title}</Text><Text style={s.hint}>{body}</Text></View><DirectionalChevron size={20} color={palette.muted} /></Pressable>;
+}
+
+type LegalProps = NativeStackScreenProps<RootStackParamList, 'Legal'>;
+function LegalScreen({ route, navigation }: LegalProps) {
+  const { t } = useI18n();
+  const document = legalDocuments[route.params.document];
+  const publicUrl = route.params.document === 'privacy' ? product.privacyUrl : route.params.document === 'terms' ? product.termsUrl : product.rightsUrl;
+  return (
+    <SafeAreaView style={s.safe}>
+      <ScrollView contentContainerStyle={s.detailPage}>
+        <TopBar onBack={navigation.goBack} />
+        <View style={s.legalHero}><View style={s.iconHero}><Feather name={route.params.document === 'privacy' ? 'lock' : route.params.document === 'terms' ? 'file-text' : 'copy'} size={27} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.pageTitle}>{document.title}</Text><Text style={s.hint}>{t('legal.updated', { date: document.updated })}</Text></View></View>
+        <View style={s.legalDocument}>{document.sections.map((section) => <View key={section.heading} style={s.legalSection}><Text style={s.sectionTitle}>{section.heading}</Text><Text style={s.body}>{section.body}</Text></View>)}</View>
+        <ActionButton label={t('support.openWeb')} icon="external-link" variant="secondary" onPress={() => void openExternal(publicUrl)} />
+        <Text style={s.supportVersion}>{product.copyright}</Text>
+        <Notice />
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -964,6 +1124,7 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   flexEnd: { flex: 1, alignItems: logicalEnd },
   safe: { flex: 1, backgroundColor: palette.background },
   pressed: { opacity: 0.84, transform: [{ scale: 0.985 }] },
+  disabled: { opacity: 0.5 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, backgroundColor: palette.background },
   loadingLogo: { width: 62, height: 62, borderRadius: 21, backgroundColor: palette.primaryAction, alignItems: 'center', justifyContent: 'center' },
   tabsMobile: { position: 'absolute', left: 12, right: 12, bottom: 10, height: 82, paddingHorizontal: 6, paddingTop: 6, paddingBottom: 6, borderTopWidth: 0, borderWidth: 1, borderColor: palette.line, borderRadius: 26, backgroundColor: palette.surface, ...shadow },
@@ -1003,6 +1164,8 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   checkbox: { width: 25, height: 25, borderRadius: 8, borderWidth: 2, borderColor: palette.line, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   checkboxChecked: { borderColor: palette.primaryAction, backgroundColor: palette.primaryAction },
   termsText: { flex: 1, color: palette.inkSoft, fontSize: 12, lineHeight: 21, textAlign: 'right', writingDirection: 'rtl' },
+  authLegalLinks: { flexDirection: rowDirection, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 18 },
+  inlineLink: { color: palette.primary, fontSize: 12, lineHeight: 20, fontWeight: '900', textDecorationLine: 'underline' },
   authSecurity: { flexDirection: rowDirection, alignItems: 'center', gap: 8, padding: 12, borderRadius: radius.md, backgroundColor: palette.tealSoft },
   authLanguage: { gap: 12, padding: 14, borderRadius: radius.lg, backgroundColor: palette.surfaceMuted, borderWidth: 1, borderColor: palette.line },
   authSecurityText: { flex: 1, color: palette.tealInk, fontSize: 11, lineHeight: 19, textAlign: 'right', writingDirection: 'rtl' },
@@ -1047,6 +1210,10 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   statAccent: { position: 'absolute', top: 0, right: 0, bottom: 0, width: 4 },
   statValue: { color: palette.ink, fontSize: 24, fontFamily: type.latinBold, marginTop: 10 },
   insightsTeaser: { position: 'relative', overflow: 'hidden', gap: 16, padding: 20, borderRadius: radius.xl, backgroundColor: palette.brandSurface, ...shadow },
+  assistantPromo: { minHeight: 92, flexDirection: rowDirection, alignItems: 'center', gap: 14, padding: 18, borderWidth: 1, borderColor: palette.secondaryBorder, borderRadius: radius.xl, backgroundColor: palette.surface, ...shadow },
+  assistantPromoIcon: { width: 50, height: 50, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.primaryAction },
+  assistantPromoTitle: { color: palette.ink, fontSize: 17, lineHeight: 25, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
+  assistantPromoText: { color: palette.muted, fontSize: 12, lineHeight: 20, textAlign: 'right', writingDirection: 'rtl', marginTop: 3 },
   teaserTop: { flexDirection: rowDirection, alignItems: 'center', gap: 13 },
   teaserIcon: { width: 51, height: 51, borderRadius: 17, backgroundColor: palette.primaryAction, alignItems: 'center', justifyContent: 'center' },
   teaserEyebrow: { color: palette.saffron, fontSize: 11, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
@@ -1137,6 +1304,7 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   profileHandle: { color: palette.onPrimaryMuted, fontSize: 12, fontFamily: type.latinSemibold, marginTop: 3 },
   profileMeta: { color: palette.onPrimaryMuted, fontSize: 11, writingDirection: 'rtl', marginTop: 4 },
   settings: { gap: 13, padding: 19, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.surface, ...shadow },
+  supportEntry: { flexDirection: rowDirection, alignItems: 'center', gap: 12, minHeight: 70, padding: 13, borderWidth: 1, borderColor: palette.secondaryBorder, borderRadius: radius.md, backgroundColor: palette.primarySoft },
   nameRow: { flexDirection: rowDirection, gap: 8 },
   nameInput: { flex: 1, minHeight: 49, paddingHorizontal: 13, color: palette.ink, fontSize: 15, writingDirection: 'rtl', borderWidth: 1, borderColor: palette.line, borderRadius: radius.md, backgroundColor: palette.background },
   save: { minWidth: 80, minHeight: 49, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: palette.primarySoft },
@@ -1168,6 +1336,37 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   dangerText: { color: palette.rose, fontSize: 13, fontWeight: '900', writingDirection: 'rtl' },
   signOut: { minHeight: 53, flexDirection: rowDirection, alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: palette.secondaryBorder, borderRadius: radius.md, backgroundColor: palette.primarySoft },
   signOutText: { color: palette.primary, fontSize: 13, fontWeight: '900', writingDirection: 'rtl' },
+  chatPage: { flex: 1, width: '100%', maxWidth: 900, alignSelf: 'center', padding: 20, gap: 14 },
+  chatHeading: { flexDirection: rowDirection, alignItems: 'center', gap: 13 },
+  chatHeadingIcon: { width: 52, height: 52, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.primaryAction },
+  assistantMode: { flexDirection: rowDirection, alignItems: 'center', alignSelf: logicalEnd, gap: 7, minHeight: 30, paddingHorizontal: 11, borderRadius: radius.round, backgroundColor: palette.tealSoft },
+  assistantModeText: { color: palette.tealInk, fontSize: 10, lineHeight: 16, fontWeight: '900', writingDirection: 'rtl' },
+  assistantPrivacy: { flexDirection: rowDirection, alignItems: 'flex-start', gap: 9, padding: 13, borderWidth: 1, borderColor: palette.borderGold, borderRadius: radius.md, backgroundColor: palette.saffronSoft },
+  assistantPrivacyText: { flex: 1, color: palette.goldBody, fontSize: 11, lineHeight: 19, textAlign: 'right', writingDirection: 'rtl' },
+  chatMessages: { flex: 1, minHeight: 260, borderWidth: 1, borderColor: palette.line, borderRadius: radius.xl, backgroundColor: palette.surface },
+  chatMessagesContent: { flexGrow: 1, gap: 11, padding: 16 },
+  chatEmpty: { flex: 1, minHeight: 245, alignItems: 'center', justifyContent: 'center', gap: 13, padding: 10 },
+  suggestionList: { width: '100%', gap: 8 },
+  suggestion: { minHeight: 50, flexDirection: rowDirection, alignItems: 'center', gap: 9, paddingHorizontal: 13, borderWidth: 1, borderColor: palette.line, borderRadius: radius.md, backgroundColor: palette.background },
+  suggestionText: { flex: 1, color: palette.inkSoft, fontSize: 12, lineHeight: 19, fontWeight: '800', textAlign: 'right', writingDirection: 'rtl' },
+  chatBubble: { maxWidth: '84%', gap: 6, paddingHorizontal: 14, paddingVertical: 11, borderRadius: radius.lg },
+  chatBubbleUser: { alignSelf: isRtl ? 'flex-start' : 'flex-end', backgroundColor: palette.primaryAction },
+  chatBubbleAssistant: { alignSelf: isRtl ? 'flex-end' : 'flex-start', borderWidth: 1, borderColor: palette.line, backgroundColor: palette.background },
+  chatBubbleText: { color: palette.inkSoft, fontSize: 14, lineHeight: 23, textAlign: 'right', writingDirection: 'rtl' },
+  chatBubbleTextUser: { color: palette.white },
+  chatSource: { color: palette.primary, fontSize: 9, lineHeight: 15, fontWeight: '800', textAlign: 'right', writingDirection: 'rtl' },
+  chatTyping: { alignSelf: isRtl ? 'flex-end' : 'flex-start', paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.md, backgroundColor: palette.surfaceMuted },
+  chatComposer: { flexDirection: rowDirection, alignItems: 'flex-end', gap: 9 },
+  chatInput: { flex: 1, minHeight: 52, maxHeight: 126, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.surface, color: palette.ink, fontSize: 14, lineHeight: 21, textAlign: 'right', writingDirection: 'rtl' },
+  chatSend: { width: 52, height: 52, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.primaryAction },
+  chatClear: { minHeight: 40, alignSelf: 'center', flexDirection: rowDirection, alignItems: 'center', gap: 7, paddingHorizontal: 12 },
+  supportGroup: { gap: 2, paddingHorizontal: 16, borderWidth: 1, borderColor: palette.line, borderRadius: radius.xl, backgroundColor: palette.surface, ...shadow },
+  supportRow: { minHeight: 72, flexDirection: rowDirection, alignItems: 'center', gap: 12, borderBottomWidth: 1, borderBottomColor: palette.line },
+  dangerSupport: { minHeight: 72, flexDirection: rowDirection, alignItems: 'center', gap: 12, paddingHorizontal: 16, borderWidth: 1, borderColor: palette.borderRose, borderRadius: radius.xl, backgroundColor: palette.roseSoft },
+  supportVersion: { color: palette.muted, fontSize: 11, lineHeight: 18, textAlign: 'center' },
+  legalHero: { flexDirection: rowDirection, alignItems: 'center', gap: 14, padding: 20, borderRadius: radius.xl, backgroundColor: palette.primarySoft },
+  legalDocument: { gap: 20, padding: 22, borderWidth: 1, borderColor: palette.line, borderRadius: radius.xl, backgroundColor: palette.surface, ...shadow },
+  legalSection: { gap: 7 },
   notice: { flexDirection: rowDirection, alignItems: 'flex-start', gap: 8, padding: 13, borderRadius: radius.md, backgroundColor: palette.surfaceMuted },
   noticeText: { flex: 1, color: palette.muted, fontSize: 10, lineHeight: 18, textAlign: 'right', writingDirection: 'rtl' },
   specBanner: { flexDirection: rowDirection, alignItems: 'center', gap: 14, padding: 18, borderRadius: radius.lg, backgroundColor: palette.brandSurface },

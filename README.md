@@ -24,7 +24,10 @@ A Persian-first, offline-capable learning and practice app for the law of Englan
 - Original justice-themed subject artwork across FLK1, FLK2, SQE2 and everyday-law pathways
 - Floating illustrated mobile navigation with clear active states and persistent labels
 - Layered tap, correct-answer, retry and lesson/test milestone sound feedback with optional mute
-- Offline-first local account with required username, hashed PIN, and no advertising or analytics SDK
+- Offline-first local account with required username, hashed PIN, in-app deletion, and no advertising or analytics SDK
+- Curriculum-grounded AI Study Assistant with five-language prompts, local fallback and non-persistent in-app chat
+- Server-side online AI proxy with moderation, rate limiting, strict production origin configuration, `store: false` and pseudonymous safety identifiers
+- In-app Support Centre, privacy policy, terms, educational disclaimer, copyright and trade-mark notice
 
 ## Stable Expo baseline
 
@@ -50,6 +53,22 @@ Web:
 npm run web
 ```
 
+## AI Study Assistant
+
+The app is fully usable without an API key. If `EXPO_PUBLIC_AI_CHAT_ENDPOINT` is absent or an online request is unavailable, the assistant searches the installed curriculum locally and labels the answer as offline.
+
+For higher-quality hosted answers, deploy the included proxy and keep the OpenAI key on that server:
+
+```powershell
+cp .env.example .env
+# Set OPENAI_API_KEY and a strict ALLOWED_ORIGINS value on the server.
+npm run ai:server
+```
+
+Then set `EXPO_PUBLIC_AI_CHAT_ENDPOINT` in the app build environment to the public HTTPS origin of the proxy. Never put `OPENAI_API_KEY` in an `EXPO_PUBLIC_` variable or in a mobile/web bundle.
+
+The proxy defaults to `gpt-5.6-terra`, can be changed with `OPENAI_MODEL`, binds to `127.0.0.1` by default, moderates the latest prompt, sends only recent chat and up to three relevant curriculum excerpts, disables Responses API state storage, and avoids logging request bodies. Set `HOST=0.0.0.0` only inside an appropriately protected production host or container. Production hosting must also be configured not to log bodies.
+
 ## Validate
 
 ```powershell
@@ -61,17 +80,26 @@ npx expo-doctor
 
 ## Publication preparation
 
-App icons, splash assets, native identifiers, EAS profiles, privacy policy, terms, editorial policy and draft store listings are included. Follow [PUBLISHING.md](./PUBLISHING.md).
+App icons, splash assets, native identifiers, EAS profiles, privacy policy, terms, editorial policy, support forms, rights notice, store listings and Apple/Google submission worksheets are included. Follow [PUBLISHING.md](./PUBLISHING.md).
 
 The SRA scope, assessment-format and transition audit is recorded in [docs/SRA_COVERAGE_AUDIT.md](./docs/SRA_COVERAGE_AUDIT.md).
 
-The remaining release blockers require the publisher rather than code:
+Public product documents:
 
-- replace publisher/contact placeholders;
-- host privacy/support pages;
-- complete Apple and Google account setup;
+- [Support](./SUPPORT.md)
+- [Privacy Policy](./docs/PRIVACY_POLICY.md)
+- [Terms and Educational Disclaimer](./docs/TERMS_AND_DISCLAIMER.md)
+- [Copyright and Trade Mark Notice](./COPYRIGHT.md)
+
+The remaining release controls require the publisher rather than code:
+
+- provide the verified seller/legal identity and monitored private contact route;
+- deploy the HTTPS AI proxy and set the production endpoint/origin allowlist, or ship offline-only;
+- merge the release so public support/privacy URLs resolve from `main`;
+- complete Apple, Google and Expo account setup;
 - obtain item-by-item legal editorial sign-off;
-- test signed builds on physical devices.
+- complete current privacy/data-safety/generative-AI questionnaires;
+- test production-signed builds on physical iPhone, iPad and Android devices.
 
 ## Content boundary
 

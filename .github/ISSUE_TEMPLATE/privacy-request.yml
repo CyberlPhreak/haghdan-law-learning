@@ -1,0 +1,35 @@
+name: Privacy or deletion request
+description: Request privacy help without posting sensitive data.
+title: "[Privacy] "
+labels:
+  - privacy
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is a public first-contact form. Do not post account secrets, identity documents or sensitive personal information. The app's local data can be deleted immediately from Profile → Support → Delete account and data.
+  - type: dropdown
+    id: request
+    attributes:
+      label: Request type
+      options:
+        - Help deleting app-local data
+        - Question about AI data handling
+        - Access, correction or deletion request
+        - Privacy concern
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: Non-sensitive summary
+      description: Give only enough information to route the request. A private route can be arranged if identity verification is genuinely required.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Public-data confirmation
+      options:
+        - label: I confirm this public summary contains no secrets, identity documents or sensitive personal information.
+          required: true

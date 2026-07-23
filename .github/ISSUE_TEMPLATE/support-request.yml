@@ -1,0 +1,41 @@
+name: Support request
+description: Report an app problem without sharing sensitive information.
+title: "[Support] "
+labels:
+  - support
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is a public form. Never include your PIN, legal case details, privileged material, identification numbers, health or financial information.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - iPhone or iPad
+        - Android
+        - Web
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      placeholder: "For example: 1.0.0"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Include safe reproduction steps and the expected result.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Public-data confirmation
+      options:
+        - label: I confirm this report contains no confidential, privileged or personal information.
+          required: true

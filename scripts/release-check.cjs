@@ -26,6 +26,9 @@ const legalContentSource = fs.readFileSync('src/legal-content.ts', 'utf8');
 const legalPacksSource = fs.readFileSync('src/legal-content-packs.ts', 'utf8');
 const subjectArtSource = fs.readFileSync('src/subject-art.ts', 'utf8');
 const componentsSource = fs.readFileSync('src/components.tsx', 'utf8');
+const assistantSource = fs.readFileSync('src/ai-chat.ts', 'utf8');
+const assistantServerSource = fs.readFileSync('server/ai-chat.mjs', 'utf8');
+const productSource = fs.readFileSync('src/product.ts', 'utf8');
 if (app.userInterfaceStyle === 'automatic' && themeSource.includes('darkPalette') && storeSource.includes('themeMode') && navigationSource.includes('ThemePicker')) pass('Persisted system, light and dark appearance modes configured');
 else fail('Complete appearance-mode configuration is missing');
 const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
@@ -39,6 +42,31 @@ if (motionSource.includes('AccessibilityInfo.isReduceMotionEnabled') && motionSo
 else fail('Accessible motion configuration is missing');
 if (authSource.includes('HASH_ROUNDS') && authSource.includes('hashPin') && authSource.includes("return 'usernameLength'") && authSource.includes("'pinFormat'") && storeSource.includes('authenticated') && storeSource.includes('pinHash') && navigationSource.includes("t(`auth.error.${usernameError}`)") && navigationSource.includes("t('auth.error.termsRequired')") && i18nSource.includes("'auth.error.invalidLogin'")) pass('Validated local account authentication configured');
 else fail('Local account authentication is incomplete');
+const clientSources = [assistantSource, navigationSource, productSource, storeSource].join('\n');
+if (
+  assistantSource.includes('EXPO_PUBLIC_AI_CHAT_ENDPOINT')
+  && assistantSource.includes('buildOfflineReply')
+  && assistantSource.includes("mode: 'online'")
+  && !clientSources.includes('OPENAI_API_KEY')
+  && assistantServerSource.includes('process.env.OPENAI_API_KEY')
+  && assistantServerSource.includes("model: 'omni-moderation-latest'")
+  && assistantServerSource.includes("process.env.HOST || '127.0.0.1'")
+  && assistantServerSource.includes('store: false')
+  && assistantServerSource.includes('safety_identifier')
+  && assistantServerSource.includes('rateLimited')
+  && navigationSource.includes('AIChatScreen')
+  && navigationSource.includes('assistant.privacy')
+) pass('Offline-first AI assistant and server-only moderated online proxy configured without a client API key');
+else fail('AI assistant security or fallback configuration is incomplete');
+if (
+  navigationSource.includes('SupportScreen')
+  && navigationSource.includes("navigation.navigate('Legal'")
+  && navigationSource.includes('resetProgress')
+  && productSource.includes('contentReportUrl')
+  && productSource.includes('privacyRequestUrl')
+  && productSource.includes('HaghDān™')
+) pass('In-app support, deletion, legal documents and unregistered trade-mark notice configured');
+else fail('Support, legal or rights controls are incomplete');
 if (navigationSource.includes('const currentAnswered = answers[question.id] !== undefined') && navigationSource.includes('disabled={!currentAnswered}') && navigationSource.includes("t('test.answerRequired')")) pass('Mandatory answer-before-next navigation configured');
 else fail('Question navigation can bypass a required answer');
 if (analyticsSource.includes('buildLearningAnalytics') && analyticsSource.includes('subjectScores') && navigationSource.includes('InsightsScreen') && navigationSource.includes('WeeklyActivityChart') && navigationSource.includes('SubjectBullet')) pass('Learning analytics, activity chart, and subject insights configured');
@@ -64,7 +92,7 @@ const pathwayArtSources = pathwayArtEntries.map(match => match[3]);
 if (pathwayArtIds.length === 25 && new Set(pathwayArtIds).size === 25 && new Set(pathwayArtSources).size === 25 && navigationSource.includes('ImageBackground') && navigationSource.includes('NavigationIcon')) pass('All 25 pathways have distinct illustrated backgrounds and premium navigation');
 else fail('A pathway is missing distinct artwork or the navigation treatment is incomplete');
 
-['assets/icon.png','assets/adaptive-icon.png','assets/splash-icon.png','assets/favicon.png','assets/sounds/tap.wav','assets/sounds/correct-clap.wav','assets/sounds/incorrect.wav','docs/PRIVACY_POLICY.md','docs/TERMS_AND_DISCLAIMER.md','docs/EDITORIAL_POLICY.md','docs/SRA_COVERAGE_AUDIT.md','eas.json','PUBLISHING.md'].forEach(path => requireFile(path, path.endsWith('.png') || path.endsWith('.wav') ? 1000 : 100));
+['assets/icon.png','assets/adaptive-icon.png','assets/splash-icon.png','assets/favicon.png','assets/sounds/tap.wav','assets/sounds/correct-clap.wav','assets/sounds/incorrect.wav','docs/PRIVACY_POLICY.md','docs/TERMS_AND_DISCLAIMER.md','docs/EDITORIAL_POLICY.md','docs/SRA_COVERAGE_AUDIT.md','COPYRIGHT.md','SUPPORT.md','store/APP_STORE_SUBMISSION.md','store/PLAY_STORE_SUBMISSION.md','store/STORE_LISTING_EN.md','store/STORE_LISTING_FA.md','.github/ISSUE_TEMPLATE/config.yml','.github/ISSUE_TEMPLATE/support-request.yml','.github/ISSUE_TEMPLATE/content-error.yml','.github/ISSUE_TEMPLATE/privacy-request.yml','.env.example','server/ai-chat.mjs','eas.json','PUBLISHING.md'].forEach(path => requireFile(path, path.endsWith('.png') || path.endsWith('.wav') ? 1000 : 100));
 ['src/art-business.ts','src/art-dispute.ts','src/art-contractEthics.ts','src/art-property.ts','src/art-estates.ts','src/art-institutions.ts','src/art-criminal.ts','src/art-clientSkills.ts'].forEach(path => requireFile(path, 30000));
 ['flk1-tort','flk1-public','flk1-services','flk2-accounts','flk2-land','flk2-trusts','flk2-criminal-practice','sqe2-advocacy','sqe2-analysis','sqe2-research','sqe2-writing','sqe2-drafting','foundations','housing','employment','immigration','police'].forEach(name => requireFile(`assets/subjects/${name}.jpg`, 100000));
 

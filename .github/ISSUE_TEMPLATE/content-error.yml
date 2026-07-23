@@ -1,0 +1,43 @@
+name: Content or rights report
+description: Flag inaccurate, outdated, inaccessible or rights-sensitive material.
+title: "[Content] "
+labels:
+  - content-review
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is a public form. Do not submit a live-client scenario, confidential evidence or personal information.
+  - type: input
+    id: location
+    attributes:
+      label: Lesson, question or screen
+      placeholder: "For example: FLK1 Contract, lesson title"
+    validations:
+      required: true
+  - type: dropdown
+    id: concern
+    attributes:
+      label: Concern
+      options:
+        - Legal accuracy or currency
+        - Translation
+        - Accessibility
+        - Copyright or trade mark
+        - Other content issue
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details and public source
+      description: Explain the concern and link to an authoritative public source where possible.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Public-data confirmation
+      options:
+        - label: I confirm this report contains no confidential, privileged or personal information.
+          required: true

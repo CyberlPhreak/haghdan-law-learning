@@ -8,6 +8,7 @@
     "android": "node scripts/run-expo.cjs start --android --port 8084 --max-workers 1",
     "ios": "node scripts/run-expo.cjs start --ios --port 8084 --max-workers 1",
     "web": "node scripts/run-expo.cjs start --web --port 8084 --max-workers 1",
+    "ai:server": "node server/ai-chat.mjs",
     "export:web": "node --max-old-space-size=4096 scripts/run-expo.cjs export --platform web --max-workers 1",
     "typecheck": "tsc --noEmit",
     "release:check": "node scripts/release-check.cjs",

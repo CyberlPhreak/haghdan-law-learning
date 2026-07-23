@@ -72,14 +72,14 @@ let darkMode = false;
 let s: ReturnType<typeof createStyles>;
 
 export function HaghDanApp() {
-  const { state } = useLearner();
+  const { state, cloud } = useLearner();
   const theme = useAppTheme();
   const { isRtl } = useI18n();
   palette = theme.palette;
   darkMode = theme.isDark;
   s = useMemo(() => createStyles(theme.palette, isRtl), [theme.palette, isRtl]);
-  if (!state.hydrated) return <Loading />;
-  if (!state.authenticated) return <Authentication />;
+  if (!state.hydrated || (cloud.configured && cloud.checking && !cloud.recoveryMode)) return <Loading />;
+  if (!state.authenticated || cloud.recoveryMode) return <Authentication />;
   return (
     <NavigationContainer theme={{ ...DefaultTheme, dark: darkMode, colors: { ...DefaultTheme.colors, primary: palette.primary, background: palette.background, card: palette.surface, text: palette.ink, border: palette.line } }}>
       <Root.Navigator screenOptions={{ headerShown: false, animation: isRtl ? 'slide_from_left' : 'slide_from_right', contentStyle: { backgroundColor: palette.background } }}>
@@ -161,43 +161,170 @@ function DesktopNavigationBackdrop() {
   );
 }
 
-type AuthErrors = Partial<Record<'name' | 'username' | 'pin' | 'confirmPin' | 'terms' | 'form', string>>;
+type AuthErrors = Partial<Record<'name' | 'username' | 'email' | 'pin' | 'confirmPin' | 'terms' | 'form', string>>;
+type CloudAuthMode = 'login' | 'signup' | 'forgot' | 'verify' | 'recovery';
 
 function Authentication() {
-  const { state, registerAccount, authenticate, resetProgress, updateSettings } = useLearner();
+  const {
+    state,
+    cloud,
+    registerAccount,
+    authenticate,
+    signInWithGoogle,
+    resendVerification,
+    sendPasswordReset,
+    updatePassword,
+    deleteAccount,
+    updateSettings,
+  } = useLearner();
   const { t, isRtl } = useI18n();
-  const hasAccount = Boolean(state.username && state.pinHash);
+  const hasLocalAccount = !cloud.configured && Boolean(state.username && state.pinHash);
+  const [mode, setMode] = useState<CloudAuthMode>(cloud.recoveryMode ? 'recovery' : cloud.pendingVerificationEmail ? 'verify' : 'login');
   const [name, setName] = useState(state.name);
   const [username, setUsername] = useState(state.username);
+  const [email, setEmail] = useState(state.email || cloud.pendingVerificationEmail);
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [goal, setGoal] = useState(2);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [errors, setErrors] = useState<AuthErrors>({});
-  const resetLocalAccount = () => Alert.alert(t('auth.resetLocalTitle'), t('auth.resetLocalBody'), [{ text: t('profile.cancel'), style: 'cancel' }, { text: t('auth.resetLocalAction'), style: 'destructive', onPress: () => void resetProgress() }]);
+  const [notice, setNotice] = useState('');
+  const [busy, setBusy] = useState(false);
+  const isSignup = cloud.configured ? mode === 'signup' : !hasLocalAccount;
+  const isRecovery = cloud.configured && mode === 'recovery';
+  const resetLocalAccount = () => Alert.alert(t('auth.resetLocalTitle'), t('auth.resetLocalBody'), [{ text: t('profile.cancel'), style: 'cancel' }, { text: t('auth.resetLocalAction'), style: 'destructive', onPress: () => void deleteAccount() }]);
 
-  const submit = () => {
+  useEffect(() => {
+    if (cloud.recoveryMode) setMode('recovery');
+    else if (cloud.pendingVerificationEmail) {
+      setEmail(cloud.pendingVerificationEmail);
+      setMode('verify');
+    }
+  }, [cloud.pendingVerificationEmail, cloud.recoveryMode]);
+
+  const messageForError = (message: string) => {
+    const normalized = message.toLocaleLowerCase('en-US');
+    if (normalized.includes('invalid login') || normalized === 'invalid_credentials') return t('auth.error.invalidLogin');
+    if (normalized.includes('email not confirmed')) return t('auth.error.verifyFirst');
+    if (normalized.includes('already registered') || normalized.includes('already exists')) return t('auth.error.accountExists');
+    return t('auth.error.cloud');
+  };
+
+  const submit = async () => {
     const nextErrors: AuthErrors = {};
-    const usernameError = validateUsername(username);
-    const pinError = validatePin(pin);
-    if (usernameError) nextErrors.username = t(`auth.error.${usernameError}`);
-    if (pinError) nextErrors.pin = t(`auth.error.${pinError}`);
+    setNotice('');
 
-    if (hasAccount) {
-      if (!Object.keys(nextErrors).length && !authenticate(username, pin)) nextErrors.form = t('auth.error.invalidLogin');
-      setErrors(nextErrors);
+    if (cloud.configured && mode === 'forgot') {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) nextErrors.email = t('auth.error.email');
+      if (Object.keys(nextErrors).length) return setErrors(nextErrors);
+      setBusy(true);
+      const result = await sendPasswordReset(email);
+      setBusy(false);
+      if (result.ok) setNotice(t('auth.resetSent'));
+      else setErrors({ form: messageForError(result.message) });
       return;
     }
 
+    if (cloud.configured && mode === 'verify') {
+      setBusy(true);
+      const result = await resendVerification(email);
+      setBusy(false);
+      if (result.ok) setNotice(t('auth.resendSent'));
+      else setErrors({ form: messageForError(result.message) });
+      return;
+    }
+
+    if (isRecovery) {
+      if (pin.length < 8) nextErrors.pin = t('auth.error.passwordLength');
+      if (pin !== confirmPin) nextErrors.confirmPin = t('auth.error.passwordMismatch');
+      if (Object.keys(nextErrors).length) return setErrors(nextErrors);
+      setBusy(true);
+      const result = await updatePassword(pin);
+      setBusy(false);
+      if (result.ok) setNotice(t('auth.passwordUpdated'));
+      else setErrors({ form: messageForError(result.message) });
+      return;
+    }
+
+    if (cloud.configured) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) nextErrors.email = t('auth.error.email');
+      if (pin.length < 8) nextErrors.pin = t('auth.error.passwordLength');
+    } else {
+      const usernameError = validateUsername(username);
+      const pinError = validatePin(pin);
+      if (usernameError) nextErrors.username = t(`auth.error.${usernameError}`);
+      if (pinError) nextErrors.pin = t(`auth.error.${pinError}`);
+    }
+
+    if (!isSignup) {
+      setErrors(nextErrors);
+      if (Object.keys(nextErrors).length) return;
+      setBusy(true);
+      const result = await authenticate(cloud.configured ? email : username, pin);
+      setBusy(false);
+      if (!result.ok) {
+        setErrors({ form: messageForError(result.message) });
+        if (cloud.configured && result.message.toLocaleLowerCase('en-US').includes('email not confirmed')) setMode('verify');
+      }
+      return;
+    }
+
+    const usernameError = validateUsername(username);
+    if (usernameError) nextErrors.username = t(`auth.error.${usernameError}`);
     if (name.trim().length < 2) nextErrors.name = t('auth.error.displayName');
-    if (pin && pin !== confirmPin) nextErrors.confirmPin = t('auth.error.pinMismatch');
+    if (pin && pin !== confirmPin) nextErrors.confirmPin = cloud.configured ? t('auth.error.passwordMismatch') : t('auth.error.pinMismatch');
     if (!termsAccepted) nextErrors.terms = t('auth.error.termsRequired');
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
       return;
     }
-    registerAccount({ name, username: normalizeUsername(username), pin, dailyGoal: goal });
+    setBusy(true);
+    const result = await registerAccount({
+      name,
+      username: normalizeUsername(username),
+      pin: cloud.configured ? undefined : pin,
+      email: cloud.configured ? email : undefined,
+      password: cloud.configured ? pin : undefined,
+      dailyGoal: goal,
+    });
+    setBusy(false);
+    if (result.ok && result.status === 'verificationSent') setMode('verify');
+    else if (!result.ok) setErrors({ form: messageForError(result.message) });
   };
+
+  const google = async () => {
+    setErrors({});
+    setNotice('');
+    if (!termsAccepted) {
+      setErrors({ terms: t('auth.error.termsRequired') });
+      return;
+    }
+    setBusy(true);
+    const result = await signInWithGoogle(new Date().toISOString());
+    setBusy(false);
+    if (!result.ok) setErrors({ form: messageForError(result.message) });
+  };
+
+  const setAuthMode = (next: CloudAuthMode) => {
+    setMode(next);
+    setErrors({});
+    setNotice('');
+    setPin('');
+    setConfirmPin('');
+  };
+
+  const heading = isRecovery
+    ? { icon: 'key' as IconName, eyebrow: t('auth.recoveryTitle'), title: t('auth.choosePassword'), body: t('auth.recoveryBody') }
+    : mode === 'forgot'
+      ? { icon: 'mail' as IconName, eyebrow: t('auth.resetTitle'), title: t('auth.resetPassword'), body: t('auth.resetBody') }
+      : mode === 'verify'
+        ? { icon: 'check-circle' as IconName, eyebrow: t('auth.verifyTitle'), title: t('auth.checkInbox'), body: t('auth.verifyBody', { email }) }
+        : {
+            icon: isSignup ? 'shield' as IconName : 'log-in' as IconName,
+            eyebrow: isSignup ? t('auth.learningAccount') : cloud.configured ? t('auth.cloudSecure') : t('auth.secure'),
+            title: isSignup ? t('auth.create') : t('auth.welcome'),
+            body: isSignup ? (cloud.configured ? t('auth.cloudCreateBody') : t('auth.createBody')) : (cloud.configured ? t('auth.cloudLoginBody') : t('auth.loginBody')),
+          };
 
   return (
     <SafeAreaView style={s.safe}>
@@ -210,29 +337,42 @@ function Authentication() {
               <LanguagePicker value={state.language} onChange={(language) => updateSettings({ language })} compact />
             </View>
             <View style={s.authIntro}>
-              <View style={s.iconHero}><Feather name={hasAccount ? 'log-in' : 'shield'} size={27} color={palette.primary} /></View>
-              <View style={s.flexEnd}><Text style={s.eyebrow}>{hasAccount ? t('auth.secure') : t('auth.learningAccount')}</Text><Text style={s.onboardTitle}>{hasAccount ? t('auth.welcome') : t('auth.create')}</Text></View>
+              <View style={s.iconHero}><Feather name={heading.icon} size={27} color={palette.primary} /></View>
+              <View style={s.flexEnd}><Text style={s.eyebrow}>{heading.eyebrow}</Text><Text style={s.onboardTitle}>{heading.title}</Text></View>
             </View>
-            <Text style={s.body}>{hasAccount ? t('auth.loginBody') : t('auth.createBody')}</Text>
+            <Text style={s.body}>{heading.body}</Text>
 
-            {!hasAccount ? <>
+            {isSignup ? <>
               <RequiredLabel text={t('auth.displayName')} />
               <TextInput value={name} onChangeText={(value) => { setName(value); setErrors((items) => ({ ...items, name: undefined, form: undefined })); }} placeholder={t('auth.displayNamePlaceholder')} placeholderTextColor={palette.muted} style={[s.input, Boolean(errors.name) && s.inputError]} textAlign={isRtl ? 'right' : 'left'} accessibilityLabel={t('auth.displayName')} autoComplete="name" />
               <FieldError message={errors.name} />
             </> : null}
 
-            <RequiredLabel text={t('auth.username')} />
-            <TextInput value={username} onChangeText={(value) => { setUsername(value); setErrors((items) => ({ ...items, username: undefined, form: undefined })); }} placeholder="sara_law" placeholderTextColor={palette.muted} style={[s.input, Boolean(errors.username) && s.inputError]} textAlign={isRtl ? 'right' : 'left'} accessibilityLabel={t('auth.username')} autoCapitalize="none" autoCorrect={false} maxLength={24} />
-            <FieldError message={errors.username} />
+            {isSignup || !cloud.configured ? <>
+              <RequiredLabel text={t('auth.username')} />
+              <TextInput value={username} onChangeText={(value) => { setUsername(value); setErrors((items) => ({ ...items, username: undefined, form: undefined })); }} placeholder="sara_law" placeholderTextColor={palette.muted} style={[s.input, Boolean(errors.username) && s.inputError]} textAlign={isRtl ? 'right' : 'left'} accessibilityLabel={t('auth.username')} autoCapitalize="none" autoCorrect={false} maxLength={24} />
+              <FieldError message={errors.username} />
+            </> : null}
 
-            <RequiredLabel text={t('auth.pin')} />
-            <TextInput value={pin} onChangeText={(value) => { setPin(value.replace(/\D/g, '')); setErrors((items) => ({ ...items, pin: undefined, form: undefined })); }} placeholder={t('auth.pinHint')} placeholderTextColor={palette.muted} style={[s.input, Boolean(errors.pin) && s.inputError]} textAlign={isRtl ? 'right' : 'left'} accessibilityLabel={t('auth.pin')} keyboardType="number-pad" secureTextEntry maxLength={6} />
-            <FieldError message={errors.pin} />
+            {cloud.configured && mode !== 'verify' ? <>
+              <RequiredLabel text={t('auth.email')} />
+              <TextInput value={email} onChangeText={(value) => { setEmail(value); setErrors((items) => ({ ...items, email: undefined, form: undefined })); }} placeholder="you@example.com" placeholderTextColor={palette.muted} style={[s.input, s.ltrInput, Boolean(errors.email) && s.inputError]} textAlign="left" accessibilityLabel={t('auth.email')} keyboardType="email-address" autoComplete="email" autoCapitalize="none" autoCorrect={false} />
+              <FieldError message={errors.email} />
+            </> : null}
 
-            {!hasAccount ? <>
-              <RequiredLabel text={t('auth.confirmPin')} />
-              <TextInput value={confirmPin} onChangeText={(value) => { setConfirmPin(value.replace(/\D/g, '')); setErrors((items) => ({ ...items, confirmPin: undefined, form: undefined })); }} placeholder={t('auth.confirmPinHint')} placeholderTextColor={palette.muted} style={[s.input, Boolean(errors.confirmPin) && s.inputError]} textAlign={isRtl ? 'right' : 'left'} accessibilityLabel={t('auth.confirmPin')} keyboardType="number-pad" secureTextEntry maxLength={6} />
+            {mode !== 'forgot' && mode !== 'verify' ? <>
+              <RequiredLabel text={cloud.configured ? t('auth.password') : t('auth.pin')} />
+              <TextInput value={pin} onChangeText={(value) => { setPin(cloud.configured ? value : value.replace(/\D/g, '')); setErrors((items) => ({ ...items, pin: undefined, form: undefined })); }} placeholder={cloud.configured ? t('auth.passwordHint') : t('auth.pinHint')} placeholderTextColor={palette.muted} style={[s.input, Boolean(errors.pin) && s.inputError]} textAlign={isRtl ? 'right' : 'left'} accessibilityLabel={cloud.configured ? t('auth.password') : t('auth.pin')} keyboardType={cloud.configured ? 'default' : 'number-pad'} secureTextEntry maxLength={cloud.configured ? 128 : 6} autoComplete={isSignup ? 'new-password' : 'current-password'} />
+              <FieldError message={errors.pin} />
+            </> : null}
+
+            {(isSignup || isRecovery) ? <>
+              <RequiredLabel text={cloud.configured ? t('auth.confirmPassword') : t('auth.confirmPin')} />
+              <TextInput value={confirmPin} onChangeText={(value) => { setConfirmPin(cloud.configured ? value : value.replace(/\D/g, '')); setErrors((items) => ({ ...items, confirmPin: undefined, form: undefined })); }} placeholder={cloud.configured ? t('auth.confirmPasswordHint') : t('auth.confirmPinHint')} placeholderTextColor={palette.muted} style={[s.input, Boolean(errors.confirmPin) && s.inputError]} textAlign={isRtl ? 'right' : 'left'} accessibilityLabel={cloud.configured ? t('auth.confirmPassword') : t('auth.confirmPin')} keyboardType={cloud.configured ? 'default' : 'number-pad'} secureTextEntry maxLength={cloud.configured ? 128 : 6} autoComplete="new-password" />
               <FieldError message={errors.confirmPin} />
+            </> : null}
+
+            {isSignup ? <>
               <Text style={s.label}>{t('auth.dailyGoal')}</Text>
               <Text style={s.hint}>{t('auth.goalHelper')}</Text>
               <GoalPicker value={goal} onChange={setGoal} />
@@ -248,9 +388,38 @@ function Authentication() {
             </> : null}
 
             <FieldError message={errors.form} centered />
-            <ActionButton label={hasAccount ? t('auth.login') : t('auth.createAction')} icon="arrow-left" onPress={submit} fullWidth />
-            {hasAccount ? <Pressable accessibilityRole="button" accessibilityLabel={t('auth.forgot')} onPress={resetLocalAccount} style={({ pressed }) => [s.authReset, pressed && s.pressed]}><Text style={s.authResetText}>{t('auth.forgot')}</Text></Pressable> : null}
-            <View style={s.authSecurity}><Feather name="lock" size={17} color={palette.teal} /><Text style={s.authSecurityText}>{t('auth.localSecurity')}</Text></View>
+            {notice ? <View style={s.authNotice}><Feather name="check-circle" size={17} color={palette.teal} /><Text style={s.authSecurityText}>{notice}</Text></View> : null}
+            <ActionButton
+              label={mode === 'forgot' ? t('auth.sendReset') : mode === 'verify' ? t('auth.resend') : isRecovery ? t('auth.updatePassword') : isSignup ? t('auth.createAction') : t('auth.login')}
+              icon={mode === 'forgot' || mode === 'verify' ? 'mail' : 'arrow-left'}
+              onPress={() => void submit()}
+              fullWidth
+              disabled={busy}
+            />
+            {busy ? <ActivityIndicator accessibilityLabel={t('common.loading')} color={palette.primary} /> : null}
+
+            {cloud.configured && (mode === 'login' || mode === 'signup') ? <>
+              {!isSignup ? <>
+                <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: termsAccepted }} onPress={() => { setTermsAccepted((value) => !value); setErrors((items) => ({ ...items, terms: undefined })); }} style={({ pressed }) => [s.termsRow, Boolean(errors.terms) && s.termsRowError, pressed && s.pressed]}>
+                  <View style={[s.checkbox, termsAccepted && s.checkboxChecked]}>{termsAccepted ? <Feather name="check" size={15} color={palette.white} /> : null}</View>
+                  <Text style={s.termsText}>{t('auth.googleTerms')}</Text>
+                </Pressable>
+                <View style={s.authLegalLinks}>
+                  <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(product.termsUrl)}><Text style={s.inlineLink}>{t('support.terms')}</Text></Pressable>
+                  <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(product.privacyUrl)}><Text style={s.inlineLink}>{t('support.privacy')}</Text></Pressable>
+                </View>
+                <FieldError message={errors.terms} />
+              </> : null}
+              <View style={s.authDivider}><View style={s.authDividerLine} /><Text style={s.hint}>{t('auth.or')}</Text><View style={s.authDividerLine} /></View>
+              <ActionButton label={t('auth.google')} icon="globe" variant="secondary" onPress={() => void google()} fullWidth disabled={busy} />
+              <View style={s.authSwitches}>
+                <Pressable accessibilityRole="button" onPress={() => setAuthMode(isSignup ? 'login' : 'signup')} style={({ pressed }) => [s.authReset, pressed && s.pressed]}><Text style={s.authLinkText}>{isSignup ? t('auth.switchLogin') : t('auth.switchSignup')}</Text></Pressable>
+                {mode === 'login' ? <Pressable accessibilityRole="button" onPress={() => setAuthMode('forgot')} style={({ pressed }) => [s.authReset, pressed && s.pressed]}><Text style={s.authResetText}>{t('auth.forgotPassword')}</Text></Pressable> : null}
+              </View>
+            </> : null}
+            {cloud.configured && (mode === 'forgot' || mode === 'verify') ? <Pressable accessibilityRole="button" onPress={() => setAuthMode('login')} style={({ pressed }) => [s.authReset, pressed && s.pressed]}><Text style={s.authLinkText}>{t('auth.backLogin')}</Text></Pressable> : null}
+            {hasLocalAccount ? <Pressable accessibilityRole="button" accessibilityLabel={t('auth.forgot')} onPress={resetLocalAccount} style={({ pressed }) => [s.authReset, pressed && s.pressed]}><Text style={s.authResetText}>{t('auth.forgot')}</Text></Pressable> : null}
+            <View style={s.authSecurity}><Feather name={cloud.configured ? 'cloud' : 'lock'} size={17} color={palette.teal} /><Text style={s.authSecurityText}>{cloud.configured ? t('auth.cloudSecurity') : t('auth.localSecurity')}</Text></View>
             <Notice />
           </MotionView>
         </ScrollView>
@@ -823,7 +992,7 @@ function SubjectBullet({ item }: { item: SubjectInsight }) {
 
 function Profile() {
   const nav = useRootNav();
-  const { state, streak, updateSettings, signOut, resetProgress } = useLearner();
+  const { state, cloud, streak, updateSettings, signOut, resetProgress } = useLearner();
   const { previewTap } = useSoundFeedback();
   const { t, formatNumber, isRtl } = useI18n();
   const [name, setName] = useState(state.name);
@@ -839,7 +1008,7 @@ function Profile() {
   const reset = () => Alert.alert(t('profile.resetTitle'), t('profile.resetBody'), [{ text: t('profile.cancel'), style: 'cancel' }, { text: t('profile.erase'), style: 'destructive', onPress: () => void resetProgress() }]);
   return (
     <Page>
-      <Header eyebrow={t('profile.eyebrow')} title={t('profile.title')} subtitle={t('profile.subtitle')} />
+      <Header eyebrow={t('profile.eyebrow')} title={t('profile.title')} subtitle={state.accountMode === 'cloud' ? t('profile.cloudSubtitle') : t('profile.subtitle')} />
       <View style={s.profile}>
         <View style={s.avatar}><Feather name="user" size={30} color={palette.white} /></View>
         <View style={s.flexEnd}><Text style={s.profileName}>{state.name}</Text><Text style={s.profileHandle}>@{state.username}</Text><Text style={s.profileMeta}>{formatNumber(state.completedLessons.length)} {t('common.lessons')} · {formatNumber(streak)} {t('home.streak')}</Text></View>
@@ -852,7 +1021,8 @@ function Profile() {
           <Pressable accessibilityRole="button" accessibilityLabel={t('common.save')} onPress={saveName} style={({ pressed }) => [s.save, pressed && s.pressed]}><Text style={s.saveText}>{t('common.save')}</Text></Pressable>
         </View>
         <FieldError message={nameError} />
-        <View style={s.accountIdentity}><View style={s.iconSmall}><Feather name="at-sign" size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.label}>{t('auth.username')}</Text><Text style={s.accountUsername}>{state.username}</Text></View></View>
+        <View style={s.accountIdentity}><View style={s.iconSmall}><Feather name="at-sign" size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.label}>{t('auth.username')}</Text><Text style={s.accountUsername}>{state.username}</Text>{state.email ? <Text style={s.accountEmail}>{state.email}</Text> : null}</View></View>
+        {state.accountMode === 'cloud' ? <View style={s.accountIdentity}><View style={s.iconSmall}><Feather name="cloud" size={19} color={cloud.syncStatus === 'error' ? palette.rose : palette.teal} /></View><View style={s.flexEnd}><Text style={s.label}>{t('profile.cloudSync')}</Text><Text style={s.hint}>{cloud.syncStatus === 'syncing' ? t('profile.syncing') : cloud.syncStatus === 'error' ? t('profile.syncError') : t('profile.synced')}</Text></View></View> : null}
         <Text style={s.label}>{t('auth.dailyGoal')}</Text>
         <GoalPicker value={state.dailyGoal} onChange={(dailyGoal) => updateSettings({ dailyGoal })} />
       </View>
@@ -877,14 +1047,14 @@ function Profile() {
       <View style={s.settings}>
         <Text style={s.sectionTitle}>{t('profile.contentTransparency')}</Text>
         <View style={s.settingRow}><View style={s.iconSmall}><Feather name="database" size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>{t('profile.specCurrent')}</Text><Text style={s.hint}>{t('profile.specSummary', { lessons: formatNumber(sqeTotals.lessons), stations: formatNumber(sqeTotals.sqe2Stations) })}</Text></View></View>
-        <View style={s.settingRow}><View style={s.iconSmall}><Feather name="lock" size={19} color={palette.teal} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>{t('profile.offlinePrivacy')}</Text><Text style={s.hint}>PIN · offline-first · no analytics SDK</Text></View></View>
+        <View style={s.settingRow}><View style={s.iconSmall}><Feather name="lock" size={19} color={palette.teal} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>{state.accountMode === 'cloud' ? t('profile.cloudPrivacy') : t('profile.offlinePrivacy')}</Text><Text style={s.hint}>{state.accountMode === 'cloud' ? t('profile.cloudPrivacyDetail') : 'PIN · offline-first · no analytics SDK'}</Text></View></View>
         <View style={s.settingRow}><View style={s.iconSmall}><Feather name="alert-circle" size={19} color={palette.rose} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>{t('profile.independent')}</Text><Text style={s.hint}>{t('profile.independentDetail')}</Text></View></View>
       </View>
       <View style={s.settings}>
         <Pressable accessibilityRole="button" accessibilityLabel={t('assistant.title')} onPress={() => nav.navigate('AIChat')} style={({ pressed }) => [s.supportEntry, pressed && s.pressed]}><View style={s.iconSmall}><Feather name="message-circle" size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.modeTitle}>{t('assistant.title')}</Text><Text style={s.hint}>{onlineAssistantConfigured ? t('assistant.online') : t('assistant.offline')}</Text></View><DirectionalChevron size={20} color={palette.muted} /></Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={t('support.title')} onPress={() => nav.navigate('Support')} style={({ pressed }) => [s.supportEntry, pressed && s.pressed]}><View style={s.iconSmall}><Feather name="help-circle" size={19} color={palette.teal} /></View><View style={s.flexEnd}><Text style={s.modeTitle}>{t('support.title')}</Text><Text style={s.hint}>{t('support.subtitle')}</Text></View><DirectionalChevron size={20} color={palette.muted} /></Pressable>
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel={t('profile.signOut')} onPress={signOut} style={({ pressed }) => [s.signOut, pressed && s.pressed]}><Feather name="log-out" size={18} color={palette.primary} /><Text style={s.signOutText}>{t('profile.signOut')}</Text></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel={t('profile.signOut')} onPress={() => void signOut()} style={({ pressed }) => [s.signOut, pressed && s.pressed]}><Feather name="log-out" size={18} color={palette.primary} /><Text style={s.signOutText}>{t('profile.signOut')}</Text></Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel={t('profile.reset')} onPress={reset} style={({ pressed }) => [s.danger, pressed && s.pressed]}><Feather name="trash-2" size={18} color={palette.rose} /><Text style={s.dangerText}>{t('profile.reset')}</Text></Pressable>
       <Notice />
     </Page>
@@ -969,11 +1139,21 @@ const openExternal = async (url: string) => {
 
 type SupportProps = NativeStackScreenProps<RootStackParamList, 'Support'>;
 function SupportScreen({ navigation }: SupportProps) {
-  const { resetProgress } = useLearner();
+  const { state, deleteAccount } = useLearner();
   const { t } = useI18n();
-  const erase = () => Alert.alert(t('auth.resetLocalTitle'), t('support.deleteBody'), [
+  const deleteTitle = state.accountMode === 'cloud' ? t('support.deleteCloud') : t('support.delete');
+  const deleteBody = state.accountMode === 'cloud' ? t('support.deleteCloudBody') : t('support.deleteBody');
+  const erase = () => Alert.alert(deleteTitle, deleteBody, [
     { text: t('profile.cancel'), style: 'cancel' },
-    { text: t('auth.resetLocalAction'), style: 'destructive', onPress: () => void resetProgress() },
+    {
+      text: t('auth.resetLocalAction'),
+      style: 'destructive',
+      onPress: () => {
+        void deleteAccount().then((result) => {
+          if (!result.ok) Alert.alert(t('support.deleteFailed'), t('support.deleteFailedBody'));
+        });
+      },
+    },
   ]);
   return (
     <SafeAreaView style={s.safe}>
@@ -990,7 +1170,7 @@ function SupportScreen({ navigation }: SupportProps) {
           <SupportRow icon="file-text" title={t('support.terms')} body={t('support.readInApp')} onPress={() => navigation.navigate('Legal', { document: 'terms' })} />
           <SupportRow icon="copy" title={t('support.rights')} body={t('support.readInApp')} onPress={() => navigation.navigate('Legal', { document: 'rights' })} />
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel={t('support.delete')} onPress={erase} style={({ pressed }) => [s.dangerSupport, pressed && s.pressed]}><Feather name="trash-2" size={18} color={palette.rose} /><View style={s.flexEnd}><Text style={s.dangerText}>{t('support.delete')}</Text><Text style={s.hint}>{t('support.deleteBody')}</Text></View></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={deleteTitle} onPress={erase} style={({ pressed }) => [s.dangerSupport, pressed && s.pressed]}><Feather name="trash-2" size={18} color={palette.rose} /><View style={s.flexEnd}><Text style={s.dangerText}>{deleteTitle}</Text><Text style={s.hint}>{deleteBody}</Text></View></Pressable>
         <Text style={s.supportVersion}>{t('support.version', { version: product.version })} · {product.copyright}</Text>
         <Notice />
       </ScrollView>
@@ -1167,10 +1347,15 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   authLegalLinks: { flexDirection: rowDirection, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 18 },
   inlineLink: { color: palette.primary, fontSize: 12, lineHeight: 20, fontWeight: '900', textDecorationLine: 'underline' },
   authSecurity: { flexDirection: rowDirection, alignItems: 'center', gap: 8, padding: 12, borderRadius: radius.md, backgroundColor: palette.tealSoft },
+  authNotice: { flexDirection: rowDirection, alignItems: 'center', gap: 8, padding: 12, borderWidth: 1, borderColor: palette.teal, borderRadius: radius.md, backgroundColor: palette.tealSoft },
+  authDivider: { flexDirection: rowDirection, alignItems: 'center', gap: 10 },
+  authDividerLine: { flex: 1, height: 1, backgroundColor: palette.line },
+  authSwitches: { flexDirection: rowDirection, flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
   authLanguage: { gap: 12, padding: 14, borderRadius: radius.lg, backgroundColor: palette.surfaceMuted, borderWidth: 1, borderColor: palette.line },
   authSecurityText: { flex: 1, color: palette.tealInk, fontSize: 11, lineHeight: 19, textAlign: 'right', writingDirection: 'rtl' },
   authReset: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   authResetText: { color: palette.rose, fontSize: 12, fontWeight: '800', writingDirection: 'rtl' },
+  authLinkText: { color: palette.primary, fontSize: 12, fontWeight: '800', writingDirection: 'rtl' },
   header: { gap: 25 },
   headerEyebrow: { flexDirection: rowDirection, alignItems: 'center', gap: 8, marginBottom: 6 },
   headerDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: palette.saffron },
@@ -1181,7 +1366,8 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   label: { color: palette.ink, fontSize: 14, fontWeight: '800', textAlign: 'right', writingDirection: 'rtl' },
   hint: { color: palette.muted, fontSize: 11, lineHeight: 19, textAlign: 'right', writingDirection: 'rtl' },
   muted: { color: palette.muted, fontSize: 14, writingDirection: 'rtl' },
-  input: { minHeight: 52, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.background, borderRadius: radius.md, paddingHorizontal: 15, color: palette.ink, fontSize: 16, writingDirection: 'rtl' },
+  input: { minHeight: 52, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.background, borderRadius: radius.md, paddingHorizontal: 15, color: palette.ink, fontSize: 16, writingDirection: isRtl ? 'rtl' : 'ltr' },
+  ltrInput: { writingDirection: 'ltr' },
   iconHero: { width: 54, height: 54, borderRadius: 18, backgroundColor: palette.primarySoft, alignItems: 'center', justifyContent: 'center' },
   iconSmall: { width: 42, height: 42, borderRadius: 14, backgroundColor: palette.primarySoft, alignItems: 'center', justifyContent: 'center' },
   goalRow: { flexDirection: rowDirection, gap: 10 },
@@ -1294,7 +1480,7 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   score: { color: palette.primary, fontSize: 46, fontFamily: type.latinBold },
   empty: { minHeight: 280, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 25, borderWidth: 1, borderColor: palette.line, borderRadius: radius.xl, backgroundColor: palette.surface, ...shadow },
   searchBox: { minHeight: 57, flexDirection: rowDirection, alignItems: 'center', gap: 10, paddingHorizontal: 15, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.surface, ...shadow },
-  searchInput: { flex: 1, minHeight: 53, color: palette.ink, fontSize: 16, writingDirection: 'rtl' },
+  searchInput: { flex: 1, minHeight: 53, color: palette.ink, fontSize: 16, writingDirection: isRtl ? 'rtl' : 'ltr' },
   glossary: { flexDirection: rowDirection, flexWrap: 'wrap', gap: 10 },
   glossaryCard: { flexGrow: 1, flexBasis: 175, minWidth: 150, padding: 14, alignItems: logicalEnd, borderWidth: 1, borderColor: palette.line, borderRadius: radius.md, backgroundColor: palette.surface },
   searchResult: { minHeight: 80, flexDirection: rowDirection, alignItems: 'center', gap: 12, padding: 14, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.surface },
@@ -1306,11 +1492,12 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   settings: { gap: 13, padding: 19, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.surface, ...shadow },
   supportEntry: { flexDirection: rowDirection, alignItems: 'center', gap: 12, minHeight: 70, padding: 13, borderWidth: 1, borderColor: palette.secondaryBorder, borderRadius: radius.md, backgroundColor: palette.primarySoft },
   nameRow: { flexDirection: rowDirection, gap: 8 },
-  nameInput: { flex: 1, minHeight: 49, paddingHorizontal: 13, color: palette.ink, fontSize: 15, writingDirection: 'rtl', borderWidth: 1, borderColor: palette.line, borderRadius: radius.md, backgroundColor: palette.background },
+  nameInput: { flex: 1, minHeight: 49, paddingHorizontal: 13, color: palette.ink, fontSize: 15, writingDirection: isRtl ? 'rtl' : 'ltr', borderWidth: 1, borderColor: palette.line, borderRadius: radius.md, backgroundColor: palette.background },
   save: { minWidth: 80, minHeight: 49, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: palette.primarySoft },
   saveText: { color: palette.primary, fontSize: 13, fontWeight: '900', writingDirection: 'rtl' },
   accountIdentity: { minHeight: 76, flexDirection: rowDirection, alignItems: 'center', gap: 11, padding: 13, borderRadius: radius.md, backgroundColor: palette.background, borderWidth: 1, borderColor: palette.line },
   accountUsername: { color: palette.primary, fontSize: 14, fontFamily: type.latinSemibold, marginTop: 2 },
+  accountEmail: { color: palette.muted, fontSize: 11, fontFamily: type.latinMedium, marginTop: 3, writingDirection: 'ltr' },
   settingRow: { minHeight: 68, flexDirection: rowDirection, alignItems: 'center', gap: 11, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 12 },
   preferenceHeading: { alignItems: logicalEnd, gap: 3, marginTop: 2 },
   themePicker: { flexDirection: rowDirection, gap: 8, padding: 6, borderRadius: radius.lg, backgroundColor: palette.background, borderWidth: 1, borderColor: palette.line },
@@ -1357,7 +1544,7 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   chatSource: { color: palette.primary, fontSize: 9, lineHeight: 15, fontWeight: '800', textAlign: 'right', writingDirection: 'rtl' },
   chatTyping: { alignSelf: isRtl ? 'flex-end' : 'flex-start', paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.md, backgroundColor: palette.surfaceMuted },
   chatComposer: { flexDirection: rowDirection, alignItems: 'flex-end', gap: 9 },
-  chatInput: { flex: 1, minHeight: 52, maxHeight: 126, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.surface, color: palette.ink, fontSize: 14, lineHeight: 21, textAlign: 'right', writingDirection: 'rtl' },
+  chatInput: { flex: 1, minHeight: 52, maxHeight: 126, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.surface, color: palette.ink, fontSize: 14, lineHeight: 21, textAlign: isRtl ? 'right' : 'left', writingDirection: isRtl ? 'rtl' : 'ltr' },
   chatSend: { width: 52, height: 52, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.primaryAction },
   chatClear: { minHeight: 40, alignSelf: 'center', flexDirection: rowDirection, alignItems: 'center', gap: 7, paddingHorizontal: 12 },
   supportGroup: { gap: 2, paddingHorizontal: 16, borderWidth: 1, borderColor: palette.line, borderRadius: radius.xl, backgroundColor: palette.surface, ...shadow },

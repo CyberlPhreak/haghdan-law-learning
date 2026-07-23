@@ -7,13 +7,13 @@ body:
   - type: markdown
     attributes:
       value: |
-        This is a public first-contact form. Do not post account secrets, identity documents or sensitive personal information. The app's local data can be deleted immediately from Profile → Support → Delete account and data.
+        This is a public first-contact form. Do not post passwords, verification/reset links, identity documents or sensitive personal information. Cloud or offline account data can be deleted from Profile → Support → Delete account and data.
   - type: dropdown
     id: request
     attributes:
       label: Request type
       options:
-        - Help deleting app-local data
+        - Help deleting account data
         - Question about AI data handling
         - Access, correction or deletion request
         - Privacy concern

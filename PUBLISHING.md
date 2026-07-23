@@ -9,10 +9,12 @@ The codebase is configured for Expo SDK 54, EAS Build and EAS Submit. It can pro
 3. Confirm the final business model. Version 1.0.0 currently has no purchases, subscriptions or advertising.
 4. Create or nominate the Expo account and run `eas init` to add the real project ID.
 5. Provide Apple Developer and Google Play Console accounts.
-6. Merge the release branch so the public support, privacy, terms and rights URLs resolve from `main`; a dedicated publisher-controlled domain is recommended for long-term stability.
-7. Choose online or offline-only AI. For online AI, deploy `server/ai-chat.mjs` behind HTTPS, keep `OPENAI_API_KEY` server-side, set a strict `ALLOWED_ORIGINS`, prevent request-body logging and inject `EXPO_PUBLIC_AI_CHAT_ENDPOINT` at build time.
-8. Complete the current store privacy, data-safety, generative-AI, age-rating, content-rights, export-compliance and app-access declarations using the signed build's actual behaviour.
-9. Test production-signed builds and account deletion on physical iPhone, iPad and Android devices.
+6. Create the production Supabase project, apply the checked-in migration, deploy `delete-account`, enable email confirmation, configure custom SMTP and create the Google OAuth credentials.
+7. Set the production Supabase URL and publishable key in EAS environment variables. Never expose the service-role key.
+8. Merge the release branch so the public support, privacy, terms and rights URLs resolve from `main`; a dedicated publisher-controlled domain is recommended for long-term stability.
+9. Choose online or offline-only AI. For online AI, deploy `server/ai-chat.mjs` behind HTTPS, keep `OPENAI_API_KEY` server-side, set a strict `ALLOWED_ORIGINS`, prevent request-body logging and inject `EXPO_PUBLIC_AI_CHAT_ENDPOINT` at build time.
+10. Complete the current store privacy, data-safety, generative-AI, age-rating, content-rights, export-compliance and app-access declarations using the signed build's actual behaviour.
+11. Test email verification, Google sign-in, password reset, cross-device sync, sign-out and account deletion on physical iPhone, iPad and Android devices.
 
 ## Local release checks
 

@@ -14,7 +14,7 @@ Multilingual FLK1, FLK2 and SQE2 study with offline lessons and an AI assistant.
 
 ## Full description
 
-HaghDān is an offline-first study companion for the law of England and Wales and the Solicitors Qualifying Examination.
+HaghDān is an offline-capable study companion for the law of England and Wales and the Solicitors Qualifying Examination.
 
 - Structured coverage across FLK1 and FLK2
 - All six assessed SQE2 legal skills
@@ -26,7 +26,7 @@ HaghDān is an offline-first study companion for the law of England and Wales an
 - English, Persian, Arabic, Spanish and Simplified Chinese interfaces
 - Automatic right-to-left and left-to-right layouts
 - Curriculum-grounded study assistant with an automatic offline mode
-- App-local account and progress controls
+- Verified account, password recovery and secure progress sync
 - No advertising or behavioural analytics SDK
 
 Online AI answers may be incomplete or inaccurate. Never submit confidential, privileged or personal information. HaghDān is independent and is not affiliated with or endorsed by the SRA, Kaplan SQE or Pearson VUE. Content is general education, not legal advice. Practice results do not guarantee an examination pass.

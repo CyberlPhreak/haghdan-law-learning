@@ -2,7 +2,7 @@
 
 Effective date: 23 July 2026
 
-These terms apply to version 1.0.0 of HaghDān. By creating the local account and accepting the terms, the user agrees to them. Mandatory consumer rights are not limited.
+These terms apply to version 1.0.0 of HaghDān. By creating an account and accepting the terms, the user agrees to them. Mandatory consumer rights are not limited.
 
 ## Educational purpose — no legal advice
 
@@ -41,7 +41,7 @@ Copyright and trade-mark details appear in the [Copyright and Trade Mark Notice]
 
 ## Account and device responsibility
 
-The account is local to the device. The user is responsible for device access and the local PIN. HaghDān cannot remotely recover a PIN or app-local progress. Deleting account data or uninstalling the app may be irreversible, subject to platform backup behaviour.
+The user is responsible for protecting access to their email, Google account, password and devices and for providing accurate account information. Cloud authentication and learning data are provided through third-party infrastructure and may be unavailable during outages. Password reset and email verification require access to the registered inbox. The offline fallback account, when available, is device-local and its PIN or progress cannot be remotely recovered.
 
 ## No guarantee
 
@@ -49,11 +49,11 @@ Completion, scores, readiness estimates or assistant responses do not guarantee 
 
 ## Availability and termination
 
-Features and content may be changed, corrected or withdrawn. Access may be limited where necessary to protect the service, comply with law or respond to abuse. The user may end these terms by deleting app-local data and uninstalling the app.
+Features and content may be changed, corrected or withdrawn. Access may be limited where necessary to protect the service, comply with law or respond to abuse. The user may end these terms by using the in-app account-deletion control and uninstalling the app. Uninstalling alone does not delete an active cloud account.
 
 ## Liability
 
-Nothing in these terms excludes liability that cannot lawfully be excluded, including applicable consumer protections. To the fullest extent permitted by law, HaghDān is supplied without implied warranties and is not responsible for indirect or consequential loss caused by reliance on educational content, loss of local data or unavailability of the online assistant.
+Nothing in these terms excludes liability that cannot lawfully be excluded, including applicable consumer protections. To the fullest extent permitted by law, HaghDān is supplied without implied warranties and is not responsible for indirect or consequential loss caused by reliance on educational content, loss of data, or unavailability of authentication, synchronisation or the online assistant.
 
 ## Governing law and support
 

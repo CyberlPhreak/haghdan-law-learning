@@ -24,7 +24,8 @@ A Persian-first, offline-capable learning and practice app for the law of Englan
 - Original justice-themed subject artwork across FLK1, FLK2, SQE2 and everyday-law pathways
 - Floating illustrated mobile navigation with clear active states and persistent labels
 - Layered tap, correct-answer, retry and lesson/test milestone sound feedback with optional mute
-- Offline-first local account with required username, hashed PIN, in-app deletion, and no advertising or analytics SDK
+- Verified email/password and Google sign-in backed by Supabase Auth, with password reset, owner-only cloud data, automatic progress sync and in-app deletion
+- Explicit offline fallback account with a locally hashed PIN when cloud configuration is absent
 - Curriculum-grounded AI Study Assistant with five-language prompts, local fallback and non-persistent in-app chat
 - Server-side online AI proxy with moderation, rate limiting, strict production origin configuration, `store: false` and pseudonymous safety identifiers
 - In-app Support Centre, privacy policy, terms, educational disclaimer, copyright and trade-mark notice
@@ -69,6 +70,27 @@ Then set `EXPO_PUBLIC_AI_CHAT_ENDPOINT` in the app build environment to the publ
 
 The proxy defaults to `gpt-5.6-terra`, can be changed with `OPENAI_MODEL`, binds to `127.0.0.1` by default, moderates the latest prompt, sends only recent chat and up to three relevant curriculum excerpts, disables Responses API state storage, and avoids logging request bodies. Set `HOST=0.0.0.0` only inside an appropriately protected production host or container. Production hosting must also be configured not to log bodies.
 
+## Accounts, database and email
+
+The production account system uses Supabase Auth and Postgres. The app bundles only a project URL and publishable key; database Row Level Security limits every profile, settings and progress row to its authenticated owner. Never place `SUPABASE_SERVICE_ROLE_KEY` in an Expo environment variable or client bundle.
+
+1. Create a Supabase project and install the Supabase CLI.
+2. Link the repository and apply the schema:
+
+   ```powershell
+   supabase link --project-ref YOUR_PROJECT_REF
+   supabase db push
+   supabase functions deploy delete-account
+   ```
+
+3. Copy `.env.example` to `.env` and set `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+4. In Supabase Auth, keep email confirmation enabled and add the production web URL plus `haghdan://**` to the redirect allow list.
+5. Enable the Google provider and add the OAuth client ID and secret created for the Supabase callback URL shown in the provider settings.
+6. Configure a publisher-controlled SMTP provider and branded verification/reset templates before production. Supabase's default email sender is intended only for limited testing.
+7. Test signup, verification, Google login, password recovery, cross-device sync, sign-out and account deletion in a signed development build.
+
+Google OAuth and email recovery use the `haghdan` custom URL scheme. Expo Go cannot fully validate that native redirect flow; use `npx expo run:ios`, `npx expo run:android`, or an EAS development build. When Supabase variables are absent, the app remains usable with its offline local-PIN account, but there is no email recovery or cross-device sync.
+
 ## Validate
 
 ```powershell
@@ -94,6 +116,7 @@ Public product documents:
 The remaining release controls require the publisher rather than code:
 
 - provide the verified seller/legal identity and monitored private contact route;
+- create the production Supabase project, apply migrations, deploy the deletion function, configure custom SMTP and complete Google OAuth credentials;
 - deploy the HTTPS AI proxy and set the production endpoint/origin allowlist, or ship offline-only;
 - merge the release so public support/privacy URLs resolve from `main`;
 - complete Apple, Google and Expo account setup;

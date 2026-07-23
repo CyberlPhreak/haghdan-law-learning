@@ -1,7 +1,7 @@
 import type { SqeStage } from './sqe';
 
 export const sraSpecification = {
-  checkedAt: '2026-07-22',
+  checkedAt: '2026-07-23',
   currentLabel: 'SRA 2025/26 · برای ارزیابی‌های تا ۳۱ اوت ۲۰۲۶',
   nextLabel: 'SRA 2026/27 · قابل اعمال از ۱ سپتامبر ۲۰۲۶',
   lawCutOff: 'قانون و رویه قابل آزمون چهار ماه تقویمی پیش از نخستین ارزیابی هر پنجره تثبیت می‌شود.',
@@ -12,6 +12,7 @@ export const sraSpecification = {
     flk2: 'https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-specification/flk2',
     blueprint: 'https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-specification/sqe1-annex4',
     sqe2: 'https://sqe.sra.org.uk/assessments/sqe2-assessments/sqe2-specification',
+    sqe2Assessments: 'https://sqe.sra.org.uk/assessments/sqe2-assessments/sqe2-specification/sqe2-assessments',
     changes2026: 'https://sqe.sra.org.uk/assessments/sqe1-assessments/sqe1-specification/sqe-changes-sept-2026',
   },
 } as const;
@@ -68,12 +69,13 @@ export const examSubjectTargets: Record<SqeStage, Record<string, number>> = {
 };
 
 export const allocateBlueprintCounts = (stage: SqeStage, total: number) => {
+  const safeTotal = Number.isFinite(total) ? Math.max(0, Math.min(180, Math.floor(total))) : 0;
   const targets = examSubjectTargets[stage];
   const entries = Object.entries(targets).map(([subjectId, fullCount], order) => {
-    const exact = (fullCount / 180) * total;
+    const exact = (fullCount / 180) * safeTotal;
     return { subjectId, order, count: Math.floor(exact), remainder: exact - Math.floor(exact) };
   });
-  let remaining = total - entries.reduce((sum, item) => sum + item.count, 0);
+  let remaining = safeTotal - entries.reduce((sum, item) => sum + item.count, 0);
   [...entries]
     .sort((a, b) => b.remainder - a.remainder || a.order - b.order)
     .forEach((item) => {
@@ -90,4 +92,6 @@ export const september2026Changes = [
   'پوشش money laundering در SQE2 از سپتامبر ۲۰۲۶ علاوه بر Business در Property Practice نیز صریحاً قابل آزمون است.',
   'معیار Correct and Comprehensive Application of Law و راهنمای ایستگاه Legal Research روشن‌تر شده است.',
   'در SQE2 دسته بازخورد جداگانه‌ای برای Ethics and Professional Conduct ایجاد می‌شود؛ قالب آزمون تغییر نمی‌کند.',
+  'The detailed FLK clarifications for business, dispute resolution, contract, property, wills and probate, trusts, and criminal practice are mapped to named learning units.',
+  'Negotiation practice is included within interview/attendance note, case and matter analysis, and legal writing, matching the permitted SQE2 assessment routes.',
 ] as const;

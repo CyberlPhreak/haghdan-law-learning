@@ -2,7 +2,7 @@
   "expo": {
     "name": "حق‌دان | HaghDān",
     "slug": "haghdan-law-learning",
-    "description": "آموزش فارسی‌محور حقوق انگلستان و ولز و آمادگی ساختاریافته SQE",
+    "description": "آموزش چندزبانه حقوق انگلستان و ولز، آمادگی ساختاریافته SQE و دستیار مطالعه هوشمند",
     "scheme": "haghdan",
     "version": "1.0.0",
     "orientation": "default",
@@ -47,6 +47,9 @@
     },
     "runtimeVersion": {
       "policy": "appVersion"
-    }
+    },
+    "plugins": [
+      "expo-web-browser"
+    ]
   }
 }

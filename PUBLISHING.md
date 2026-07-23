@@ -2,16 +2,19 @@
 
 The codebase is configured for Expo SDK 54, EAS Build and EAS Submit. It can produce preview and production binaries, but store submission requires owner-controlled accounts and the release blockers below.
 
-## Release blockers requiring the publisher
+## Release controls requiring the publisher
 
-1. Replace publisher/contact placeholders in privacy policy and terms.
-2. Obtain documented solicitor/editorial approval for every lesson and question.
-3. Confirm the final business model and whether purchases or subscriptions will be included.
-4. Create or nominate the Expo account and run `eas init` to add the project ID.
+1. Provide the verified store seller/legal identity, correspondence details and a monitored private contact route.
+2. Obtain documented solicitor/editorial approval for every lesson, question and translated string.
+3. Confirm the final business model. Version 1.0.0 currently has no purchases, subscriptions or advertising.
+4. Create or nominate the Expo account and run `eas init` to add the real project ID.
 5. Provide Apple Developer and Google Play Console accounts.
-6. Host the privacy policy and support page at public HTTPS URLs.
-7. Complete store questionnaires, age rating, content rights and data-safety declarations.
-8. Test production-signed builds on physical iPhone, iPad and Android devices.
+6. Create the production Supabase project, apply the checked-in migration, deploy `delete-account`, enable email confirmation, configure custom SMTP and create the Google OAuth credentials.
+7. Set the production Supabase URL and publishable key in EAS environment variables. Never expose the service-role key.
+8. Merge the release branch so the public support, privacy, terms and rights URLs resolve from `main`; a dedicated publisher-controlled domain is recommended for long-term stability.
+9. Choose online or offline-only AI. For online AI, deploy `server/ai-chat.mjs` behind HTTPS, keep `OPENAI_API_KEY` server-side, set a strict `ALLOWED_ORIGINS`, prevent request-body logging and inject `EXPO_PUBLIC_AI_CHAT_ENDPOINT` at build time.
+10. Complete the current store privacy, data-safety, generative-AI, age-rating, content-rights, export-compliance and app-access declarations using the signed build's actual behaviour.
+11. Test email verification, Google sign-in, password reset, cross-device sync, sign-out and account deletion on physical iPhone, iPad and Android devices.
 
 ## Local release checks
 
@@ -20,6 +23,12 @@ nvm use 20.19.4
 npm ci
 npm run release:check
 npm run export:web
+```
+
+If online AI is part of the release, also verify the deployed proxy:
+
+```powershell
+curl https://YOUR-AI-HOST.example/health
 ```
 
 ## Preview builds
@@ -48,4 +57,6 @@ Apple submission requires an Apple Developer account. Android submission require
 
 ## Final evidence pack
 
-Retain successful release-check output, Expo Doctor output, signed-build identifiers, physical-device screenshots, accessibility checks, privacy/data-safety answers and the legal editorial sign-off register.
+Retain successful release-check output, Expo Doctor output, AI health/security configuration, signed-build identifiers, physical-device screenshots, accessibility checks, privacy/data-safety answers and the legal editorial sign-off register.
+
+Use [store/APP_STORE_SUBMISSION.md](./store/APP_STORE_SUBMISSION.md) and [store/PLAY_STORE_SUBMISSION.md](./store/PLAY_STORE_SUBMISSION.md) as evidence worksheets. They are not substitutes for the live store questionnaires, which can change.

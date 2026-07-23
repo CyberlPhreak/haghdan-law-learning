@@ -305,6 +305,31 @@ const scenarioContexts: Record<string, string> = {
   'sqe2-drafting': 'باید precedent را با instructions و facts پرونده تطبیق دهید و clauses مؤثر بسازید.',
 };
 
+// These English-only supplements make the clarifications published for the
+// September 2026 specification visible without invalidating the existing
+// reviewed offline translation index for the core Persian lessons.
+const september2026Clarifications: Record<string, string[]> = {
+  'business-finance': ['Share funding expressly includes redemption and buyback. Other reductions of share capital and Companies Act 2006 financial assistance are outside this clarified line.'],
+  'business-tax': ['Corporation Tax coverage includes income profits, chargeable gains, allowable deductions, principal reliefs and exemptions, calculation, payment and collection.'],
+  'dispute-costs': ['Enforcement includes the procedure for obtaining information from a judgment debtor.'],
+  'property-searches': ['Identify who makes each search or enquiry and analyse issues arising from every result rather than merely naming the search.'],
+  'property-contract': ['Practise drafting the sale contract and exchanging with authority through the Law Society formulae for exchange.'],
+  'property-completion': ['Pre-completion work includes financial considerations and apportionments.'],
+  'property-commercial-leases': ['Practise drafting the assignment contract and applying Part II Landlord and Tenant Act 1954, including contracting out.'],
+  'wills-validity': ['Cover knowledge and approval and identify who bears the burden of proof when validity is challenged.'],
+  'wills-revocation': ['Cover the use and effect of codicils, every method of revocation, and the effect of divorce or dissolution on an existing will.'],
+  'wills-grants': ['Cover executor eligibility and suitability, Non-Contentious Probate Rules priority, and the evidence required for each form of grant.'],
+  'wills-administration': ['Cover pre-distribution duties and protection against unknown, missing or insolvent beneficiaries and creditors.'],
+  'wills-tax': ['Cover IHT incidence among representatives, beneficiaries, trustees and co-owners; immediately chargeable transfers, PETs and gifts with reservation; and the statutory factors for a 1975 Act claim.'],
+  'trusts-constitution': ['Cover the Re Rose and Strong v Bird rules and Choithram v Pagarani as exceptions relevant to imperfect gifts and constitution.'],
+  'trusts-implied': ['Distinguish automatic resulting trusts from presumed resulting trusts.'],
+  'crim-detention': ['Apply the requirements of a lawful suspect interview under PACE 1984 Code C.'],
+  'crim-bail': ['Practise the procedure for both applying for and opposing bail.'],
+  'crim-evidence': ['Cover challenges to hearsay admissibility and the admission, exclusion and use of bad-character evidence.'],
+  'crim-trial': ['Address the relevance of a defendant’s good character and the procedure and hearings in the youth court.'],
+  'crim-sentence': ['Cover Newton hearings and youth sentencing, including the role of the relevant children and young people guideline.'],
+};
+
 const splitFocus = (focus: string) => focus.split('،').map(item => item.trim()).filter(Boolean);
 
 const answerSet = (correct: string, salt: number, alternatives: string[] = []) => {
@@ -409,6 +434,7 @@ const makeLesson = (subject: Seed, raw: string): Lesson => {
   const quiz = practical
     ? [0, 1, 2, 3].map(index => makeSkillQuiz(subject, unit, index))
     : [0, 1, 2, 3, 4, 5].map(variant => makeQuestion(subject, raw, variant));
+  const specificationClarifications = september2026Clarifications[unit.id];
   return {
     id: unit.id,
     pathwayId: subject.id,
@@ -444,6 +470,15 @@ const makeLesson = (subject: Seed, raw: string): Lesson => {
         termFa: practical ? 'معیار مهارت' : 'اعمال قانون',
         termEn: practical ? 'Skills criterion' : 'Application of law',
       },
+      ...(specificationClarifications ? [{
+        title: 'September 2026 specification clarification',
+        body: 'The SRA annual review expressly clarified that the following detail can be assessed from 1 September 2026.',
+        bullets: specificationClarifications,
+        checklist: ['Explain the rule and its elements.', 'Apply it to a short client scenario.', 'Check the assessment-window law cut-off before relying on a rate, threshold, time limit or procedural rule.'],
+        source: 'SRA annual review of Assessment Specifications and the FLK: changes applying from 1 September 2026.',
+        termFa: 'September 2026 coverage',
+        termEn: 'September 2026 coverage',
+      }] : []),
       {
         title: 'سناریوی تمرینی هدایت‌شده',
         body: scenario,
@@ -494,9 +529,10 @@ const shuffleQuestions = (items: SqeQuestion[]) => {
 
 export const buildBalancedTestQuestions = (stage: SqeStage, count: number, subjectId?: string) => {
   const pool = questionsForStage(stage);
-  if (subjectId) return shuffleQuestions(pool.filter((question) => question.subjectId === subjectId)).slice(0, count);
+  const safeCount = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+  if (subjectId) return shuffleQuestions(pool.filter((question) => question.subjectId === subjectId)).slice(0, safeCount);
 
-  const allocations = allocateBlueprintCounts(stage, Math.min(count, pool.length));
+  const allocations = allocateBlueprintCounts(stage, Math.min(safeCount, pool.length));
   const selected = Object.entries(allocations).flatMap(([allocatedSubjectId, allocatedCount]) =>
     shuffleQuestions(pool.filter((question) => question.subjectId === allocatedSubjectId)).slice(0, allocatedCount),
   );

@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, type PropsWithChildren } from 'react';
-import { Animated, Easing, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, Easing, Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import type { IconName, Pathway } from './data';
 import { LocalizedText as Text, useI18n } from './i18n';
@@ -81,7 +81,9 @@ export function ActionButton({
   sound?: boolean;
 }) {
   const { palette, styles } = useComponentTheme();
+  const { isRtl } = useI18n();
   const foreground = variant === 'primary' ? palette.onPrimaryAction : variant === 'secondary' ? palette.primary : palette.inkSoft;
+  const directionalIcon = !isRtl && icon === 'arrow-left' ? 'arrow-right' : !isRtl && icon === 'arrow-right' ? 'arrow-left' : icon;
   return (
     <Pressable
       accessibilityRole="button"
@@ -100,7 +102,7 @@ export function ActionButton({
       ]}
     >
       <Text style={[styles.buttonLabel, { color: foreground }]}>{label}</Text>
-      <Feather name={icon} size={18} color={foreground} />
+      <Feather name={directionalIcon} size={18} color={foreground} />
     </Pressable>
   );
 }
@@ -139,6 +141,7 @@ export function Chip({ label, icon, tone = 'neutral' }: { label: string; icon?: 
 
 export function SectionHeader({ eyebrow, title, action }: { eyebrow?: string; title: string; action?: { label: string; onPress: () => void } }) {
   const { palette, styles } = useComponentTheme();
+  const { isRtl } = useI18n();
   return (
     <View style={styles.sectionHeader}>
       <View style={styles.sectionCopy}>
@@ -148,7 +151,7 @@ export function SectionHeader({ eyebrow, title, action }: { eyebrow?: string; ti
       {action ? (
         <Pressable accessibilityRole="button" accessibilityLabel={action.label} onPress={action.onPress} style={({ pressed }) => [styles.textAction, pressed && styles.pressed]}>
           <Text style={styles.textActionLabel}>{action.label}</Text>
-          <Feather name="arrow-left" size={17} color={palette.primary} />
+          <Feather name={isRtl ? 'arrow-left' : 'arrow-right'} size={17} color={palette.primary} />
         </Pressable>
       ) : null}
     </View>
@@ -196,7 +199,9 @@ export function Surface({ children, style }: PropsWithChildren<{ style?: StylePr
 
 const createStyles = (palette: AppPalette, isRtl = true) => {
   const shadow = createShadow(palette);
-  const rowDirection = isRtl ? 'row-reverse' : 'row';
+  // Browsers already reverse logical rows through the document's dir attribute.
+  // Native platforms still need the explicit row reversal.
+  const rowDirection = Platform.OS === 'web' ? 'row' : isRtl ? 'row-reverse' : 'row';
   const logicalEnd = isRtl ? 'flex-end' : 'flex-start';
   return StyleSheet.create({
     brand: { flexDirection: rowDirection, alignItems: 'center', gap: 12 },

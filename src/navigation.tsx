@@ -3,12 +3,13 @@ import * as Haptics from 'expo-haptics';
 import { DefaultTheme, NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator, type NativeStackNavigationProp, type NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Alert,
   ImageBackground,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -20,6 +21,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { buildLearningAnalytics, type LearningAnalytics, type SubjectInsight } from './analytics';
+import { askStudyAssistant, assistantSuggestions, onlineAssistantConfigured, privacySafeLearnerId, type ChatMessage } from './ai-chat';
 import { normalizeUsername, validatePin, validateUsername } from './auth';
 import { ActionButton, Brand, ProgressBar } from './components';
 import { glossary, lessonById, lessons, pathwayById, pathways, type IconName, type Lesson, type Pathway, type QuizQuestion } from './curriculum';
@@ -27,6 +29,7 @@ import { buildGameProfile, gameLevels, lessonXp, localDateKey, testXp, type Achi
 import { languageOptions, LocalizedText as Text, useI18n, type AppLanguage } from './i18n';
 import { localizeLesson, localizeQuestion } from './legal-content';
 import { MotionView, motion } from './motion';
+import { legalDocuments, product, type LegalDocumentId } from './product';
 import { buildBalancedTestQuestions, sqeTotals, stageSubjects, type SqeStage, type SqeTrack } from './sqe';
 import { sraSpecification } from './sqe-spec';
 import { SoundPressable as Pressable, useSoundFeedback } from './sound';
@@ -41,6 +44,9 @@ export type RootStackParamList = {
   Test: { stage: SqeStage; count: number; mode: TestMode; subjectId?: string };
   Insights: undefined;
   GameHub: undefined;
+  AIChat: undefined;
+  Support: undefined;
+  Legal: { document: LegalDocumentId };
 };
 
 type TabParams = {
@@ -66,23 +72,26 @@ let darkMode = false;
 let s: ReturnType<typeof createStyles>;
 
 export function HaghDanApp() {
-  const { state } = useLearner();
+  const { state, cloud } = useLearner();
   const theme = useAppTheme();
   const { isRtl } = useI18n();
   palette = theme.palette;
   darkMode = theme.isDark;
   s = useMemo(() => createStyles(theme.palette, isRtl), [theme.palette, isRtl]);
-  if (!state.hydrated) return <Loading />;
-  if (!state.authenticated) return <Authentication />;
+  if (!state.hydrated || (cloud.configured && cloud.checking && !cloud.recoveryMode)) return <Loading />;
+  if (!state.authenticated || cloud.recoveryMode) return <Authentication />;
   return (
     <NavigationContainer theme={{ ...DefaultTheme, dark: darkMode, colors: { ...DefaultTheme.colors, primary: palette.primary, background: palette.background, card: palette.surface, text: palette.ink, border: palette.line } }}>
-      <Root.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right', contentStyle: { backgroundColor: palette.background } }}>
+      <Root.Navigator screenOptions={{ headerShown: false, animation: isRtl ? 'slide_from_left' : 'slide_from_right', contentStyle: { backgroundColor: palette.background } }}>
         <Root.Screen name="Main" component={MainTabs} />
         <Root.Screen name="Pathway" component={PathwayScreen} />
         <Root.Screen name="Lesson" component={LessonScreen} />
         <Root.Screen name="Test" component={TestScreen} />
         <Root.Screen name="Insights" component={InsightsScreen} />
         <Root.Screen name="GameHub" component={GameHubScreen} />
+        <Root.Screen name="AIChat" component={AIChatScreen} />
+        <Root.Screen name="Support" component={SupportScreen} />
+        <Root.Screen name="Legal" component={LegalScreen} />
       </Root.Navigator>
     </NavigationContainer>
   );
@@ -152,43 +161,170 @@ function DesktopNavigationBackdrop() {
   );
 }
 
-type AuthErrors = Partial<Record<'name' | 'username' | 'pin' | 'confirmPin' | 'terms' | 'form', string>>;
+type AuthErrors = Partial<Record<'name' | 'username' | 'email' | 'pin' | 'confirmPin' | 'terms' | 'form', string>>;
+type CloudAuthMode = 'login' | 'signup' | 'forgot' | 'verify' | 'recovery';
 
 function Authentication() {
-  const { state, registerAccount, authenticate, resetProgress, updateSettings } = useLearner();
+  const {
+    state,
+    cloud,
+    registerAccount,
+    authenticate,
+    signInWithGoogle,
+    resendVerification,
+    sendPasswordReset,
+    updatePassword,
+    deleteAccount,
+    updateSettings,
+  } = useLearner();
   const { t, isRtl } = useI18n();
-  const hasAccount = Boolean(state.username && state.pinHash);
+  const hasLocalAccount = !cloud.configured && Boolean(state.username && state.pinHash);
+  const [mode, setMode] = useState<CloudAuthMode>(cloud.recoveryMode ? 'recovery' : cloud.pendingVerificationEmail ? 'verify' : 'login');
   const [name, setName] = useState(state.name);
   const [username, setUsername] = useState(state.username);
+  const [email, setEmail] = useState(state.email || cloud.pendingVerificationEmail);
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [goal, setGoal] = useState(2);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [errors, setErrors] = useState<AuthErrors>({});
-  const resetLocalAccount = () => Alert.alert(t('auth.resetLocalTitle'), t('auth.resetLocalBody'), [{ text: t('profile.cancel'), style: 'cancel' }, { text: t('auth.resetLocalAction'), style: 'destructive', onPress: () => void resetProgress() }]);
+  const [notice, setNotice] = useState('');
+  const [busy, setBusy] = useState(false);
+  const isSignup = cloud.configured ? mode === 'signup' : !hasLocalAccount;
+  const isRecovery = cloud.configured && mode === 'recovery';
+  const resetLocalAccount = () => Alert.alert(t('auth.resetLocalTitle'), t('auth.resetLocalBody'), [{ text: t('profile.cancel'), style: 'cancel' }, { text: t('auth.resetLocalAction'), style: 'destructive', onPress: () => void deleteAccount() }]);
 
-  const submit = () => {
+  useEffect(() => {
+    if (cloud.recoveryMode) setMode('recovery');
+    else if (cloud.pendingVerificationEmail) {
+      setEmail(cloud.pendingVerificationEmail);
+      setMode('verify');
+    }
+  }, [cloud.pendingVerificationEmail, cloud.recoveryMode]);
+
+  const messageForError = (message: string) => {
+    const normalized = message.toLocaleLowerCase('en-US');
+    if (normalized.includes('invalid login') || normalized === 'invalid_credentials') return t('auth.error.invalidLogin');
+    if (normalized.includes('email not confirmed')) return t('auth.error.verifyFirst');
+    if (normalized.includes('already registered') || normalized.includes('already exists')) return t('auth.error.accountExists');
+    return t('auth.error.cloud');
+  };
+
+  const submit = async () => {
     const nextErrors: AuthErrors = {};
-    const usernameError = validateUsername(username);
-    const pinError = validatePin(pin);
-    if (usernameError) nextErrors.username = t(`auth.error.${usernameError}`);
-    if (pinError) nextErrors.pin = t(`auth.error.${pinError}`);
+    setNotice('');
 
-    if (hasAccount) {
-      if (!Object.keys(nextErrors).length && !authenticate(username, pin)) nextErrors.form = t('auth.error.invalidLogin');
-      setErrors(nextErrors);
+    if (cloud.configured && mode === 'forgot') {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) nextErrors.email = t('auth.error.email');
+      if (Object.keys(nextErrors).length) return setErrors(nextErrors);
+      setBusy(true);
+      const result = await sendPasswordReset(email);
+      setBusy(false);
+      if (result.ok) setNotice(t('auth.resetSent'));
+      else setErrors({ form: messageForError(result.message) });
       return;
     }
 
+    if (cloud.configured && mode === 'verify') {
+      setBusy(true);
+      const result = await resendVerification(email);
+      setBusy(false);
+      if (result.ok) setNotice(t('auth.resendSent'));
+      else setErrors({ form: messageForError(result.message) });
+      return;
+    }
+
+    if (isRecovery) {
+      if (pin.length < 8) nextErrors.pin = t('auth.error.passwordLength');
+      if (pin !== confirmPin) nextErrors.confirmPin = t('auth.error.passwordMismatch');
+      if (Object.keys(nextErrors).length) return setErrors(nextErrors);
+      setBusy(true);
+      const result = await updatePassword(pin);
+      setBusy(false);
+      if (result.ok) setNotice(t('auth.passwordUpdated'));
+      else setErrors({ form: messageForError(result.message) });
+      return;
+    }
+
+    if (cloud.configured) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) nextErrors.email = t('auth.error.email');
+      if (pin.length < 8) nextErrors.pin = t('auth.error.passwordLength');
+    } else {
+      const usernameError = validateUsername(username);
+      const pinError = validatePin(pin);
+      if (usernameError) nextErrors.username = t(`auth.error.${usernameError}`);
+      if (pinError) nextErrors.pin = t(`auth.error.${pinError}`);
+    }
+
+    if (!isSignup) {
+      setErrors(nextErrors);
+      if (Object.keys(nextErrors).length) return;
+      setBusy(true);
+      const result = await authenticate(cloud.configured ? email : username, pin);
+      setBusy(false);
+      if (!result.ok) {
+        setErrors({ form: messageForError(result.message) });
+        if (cloud.configured && result.message.toLocaleLowerCase('en-US').includes('email not confirmed')) setMode('verify');
+      }
+      return;
+    }
+
+    const usernameError = validateUsername(username);
+    if (usernameError) nextErrors.username = t(`auth.error.${usernameError}`);
     if (name.trim().length < 2) nextErrors.name = t('auth.error.displayName');
-    if (pin && pin !== confirmPin) nextErrors.confirmPin = t('auth.error.pinMismatch');
+    if (pin && pin !== confirmPin) nextErrors.confirmPin = cloud.configured ? t('auth.error.passwordMismatch') : t('auth.error.pinMismatch');
     if (!termsAccepted) nextErrors.terms = t('auth.error.termsRequired');
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
       return;
     }
-    registerAccount({ name, username: normalizeUsername(username), pin, dailyGoal: goal });
+    setBusy(true);
+    const result = await registerAccount({
+      name,
+      username: normalizeUsername(username),
+      pin: cloud.configured ? undefined : pin,
+      email: cloud.configured ? email : undefined,
+      password: cloud.configured ? pin : undefined,
+      dailyGoal: goal,
+    });
+    setBusy(false);
+    if (result.ok && result.status === 'verificationSent') setMode('verify');
+    else if (!result.ok) setErrors({ form: messageForError(result.message) });
   };
+
+  const google = async () => {
+    setErrors({});
+    setNotice('');
+    if (!termsAccepted) {
+      setErrors({ terms: t('auth.error.termsRequired') });
+      return;
+    }
+    setBusy(true);
+    const result = await signInWithGoogle(new Date().toISOString());
+    setBusy(false);
+    if (!result.ok) setErrors({ form: messageForError(result.message) });
+  };
+
+  const setAuthMode = (next: CloudAuthMode) => {
+    setMode(next);
+    setErrors({});
+    setNotice('');
+    setPin('');
+    setConfirmPin('');
+  };
+
+  const heading = isRecovery
+    ? { icon: 'key' as IconName, eyebrow: t('auth.recoveryTitle'), title: t('auth.choosePassword'), body: t('auth.recoveryBody') }
+    : mode === 'forgot'
+      ? { icon: 'mail' as IconName, eyebrow: t('auth.resetTitle'), title: t('auth.resetPassword'), body: t('auth.resetBody') }
+      : mode === 'verify'
+        ? { icon: 'check-circle' as IconName, eyebrow: t('auth.verifyTitle'), title: t('auth.checkInbox'), body: t('auth.verifyBody', { email }) }
+        : {
+            icon: isSignup ? 'shield' as IconName : 'log-in' as IconName,
+            eyebrow: isSignup ? t('auth.learningAccount') : cloud.configured ? t('auth.cloudSecure') : t('auth.secure'),
+            title: isSignup ? t('auth.create') : t('auth.welcome'),
+            body: isSignup ? (cloud.configured ? t('auth.cloudCreateBody') : t('auth.createBody')) : (cloud.configured ? t('auth.cloudLoginBody') : t('auth.loginBody')),
+          };
 
   return (
     <SafeAreaView style={s.safe}>
@@ -201,29 +337,42 @@ function Authentication() {
               <LanguagePicker value={state.language} onChange={(language) => updateSettings({ language })} compact />
             </View>
             <View style={s.authIntro}>
-              <View style={s.iconHero}><Feather name={hasAccount ? 'log-in' : 'shield'} size={27} color={palette.primary} /></View>
-              <View style={s.flexEnd}><Text style={s.eyebrow}>{hasAccount ? t('auth.secure') : t('auth.learningAccount')}</Text><Text style={s.onboardTitle}>{hasAccount ? t('auth.welcome') : t('auth.create')}</Text></View>
+              <View style={s.iconHero}><Feather name={heading.icon} size={27} color={palette.primary} /></View>
+              <View style={s.flexEnd}><Text style={s.eyebrow}>{heading.eyebrow}</Text><Text style={s.onboardTitle}>{heading.title}</Text></View>
             </View>
-            <Text style={s.body}>{hasAccount ? t('auth.loginBody') : t('auth.createBody')}</Text>
+            <Text style={s.body}>{heading.body}</Text>
 
-            {!hasAccount ? <>
+            {isSignup ? <>
               <RequiredLabel text={t('auth.displayName')} />
               <TextInput value={name} onChangeText={(value) => { setName(value); setErrors((items) => ({ ...items, name: undefined, form: undefined })); }} placeholder={t('auth.displayNamePlaceholder')} placeholderTextColor={palette.muted} style={[s.input, Boolean(errors.name) && s.inputError]} textAlign={isRtl ? 'right' : 'left'} accessibilityLabel={t('auth.displayName')} autoComplete="name" />
               <FieldError message={errors.name} />
             </> : null}
 
-            <RequiredLabel text={t('auth.username')} />
-            <TextInput value={username} onChangeText={(value) => { setUsername(value); setErrors((items) => ({ ...items, username: undefined, form: undefined })); }} placeholder="sara_law" placeholderTextColor={palette.muted} style={[s.input, Boolean(errors.username) && s.inputError]} textAlign={isRtl ? 'right' : 'left'} accessibilityLabel={t('auth.username')} autoCapitalize="none" autoCorrect={false} maxLength={24} />
-            <FieldError message={errors.username} />
+            {isSignup || !cloud.configured ? <>
+              <RequiredLabel text={t('auth.username')} />
+              <TextInput value={username} onChangeText={(value) => { setUsername(value); setErrors((items) => ({ ...items, username: undefined, form: undefined })); }} placeholder="sara_law" placeholderTextColor={palette.muted} style={[s.input, Boolean(errors.username) && s.inputError]} textAlign={isRtl ? 'right' : 'left'} accessibilityLabel={t('auth.username')} autoCapitalize="none" autoCorrect={false} maxLength={24} />
+              <FieldError message={errors.username} />
+            </> : null}
 
-            <RequiredLabel text={t('auth.pin')} />
-            <TextInput value={pin} onChangeText={(value) => { setPin(value.replace(/\D/g, '')); setErrors((items) => ({ ...items, pin: undefined, form: undefined })); }} placeholder={t('auth.pinHint')} placeholderTextColor={palette.muted} style={[s.input, Boolean(errors.pin) && s.inputError]} textAlign={isRtl ? 'right' : 'left'} accessibilityLabel={t('auth.pin')} keyboardType="number-pad" secureTextEntry maxLength={6} />
-            <FieldError message={errors.pin} />
+            {cloud.configured && mode !== 'verify' ? <>
+              <RequiredLabel text={t('auth.email')} />
+              <TextInput value={email} onChangeText={(value) => { setEmail(value); setErrors((items) => ({ ...items, email: undefined, form: undefined })); }} placeholder="you@example.com" placeholderTextColor={palette.muted} style={[s.input, s.ltrInput, Boolean(errors.email) && s.inputError]} textAlign="left" accessibilityLabel={t('auth.email')} keyboardType="email-address" autoComplete="email" autoCapitalize="none" autoCorrect={false} />
+              <FieldError message={errors.email} />
+            </> : null}
 
-            {!hasAccount ? <>
-              <RequiredLabel text={t('auth.confirmPin')} />
-              <TextInput value={confirmPin} onChangeText={(value) => { setConfirmPin(value.replace(/\D/g, '')); setErrors((items) => ({ ...items, confirmPin: undefined, form: undefined })); }} placeholder={t('auth.confirmPinHint')} placeholderTextColor={palette.muted} style={[s.input, Boolean(errors.confirmPin) && s.inputError]} textAlign={isRtl ? 'right' : 'left'} accessibilityLabel={t('auth.confirmPin')} keyboardType="number-pad" secureTextEntry maxLength={6} />
+            {mode !== 'forgot' && mode !== 'verify' ? <>
+              <RequiredLabel text={cloud.configured ? t('auth.password') : t('auth.pin')} />
+              <TextInput value={pin} onChangeText={(value) => { setPin(cloud.configured ? value : value.replace(/\D/g, '')); setErrors((items) => ({ ...items, pin: undefined, form: undefined })); }} placeholder={cloud.configured ? t('auth.passwordHint') : t('auth.pinHint')} placeholderTextColor={palette.muted} style={[s.input, Boolean(errors.pin) && s.inputError]} textAlign={isRtl ? 'right' : 'left'} accessibilityLabel={cloud.configured ? t('auth.password') : t('auth.pin')} keyboardType={cloud.configured ? 'default' : 'number-pad'} secureTextEntry maxLength={cloud.configured ? 128 : 6} autoComplete={isSignup ? 'new-password' : 'current-password'} />
+              <FieldError message={errors.pin} />
+            </> : null}
+
+            {(isSignup || isRecovery) ? <>
+              <RequiredLabel text={cloud.configured ? t('auth.confirmPassword') : t('auth.confirmPin')} />
+              <TextInput value={confirmPin} onChangeText={(value) => { setConfirmPin(cloud.configured ? value : value.replace(/\D/g, '')); setErrors((items) => ({ ...items, confirmPin: undefined, form: undefined })); }} placeholder={cloud.configured ? t('auth.confirmPasswordHint') : t('auth.confirmPinHint')} placeholderTextColor={palette.muted} style={[s.input, Boolean(errors.confirmPin) && s.inputError]} textAlign={isRtl ? 'right' : 'left'} accessibilityLabel={cloud.configured ? t('auth.confirmPassword') : t('auth.confirmPin')} keyboardType={cloud.configured ? 'default' : 'number-pad'} secureTextEntry maxLength={cloud.configured ? 128 : 6} autoComplete="new-password" />
               <FieldError message={errors.confirmPin} />
+            </> : null}
+
+            {isSignup ? <>
               <Text style={s.label}>{t('auth.dailyGoal')}</Text>
               <Text style={s.hint}>{t('auth.goalHelper')}</Text>
               <GoalPicker value={goal} onChange={setGoal} />
@@ -231,13 +380,46 @@ function Authentication() {
                 <View style={[s.checkbox, termsAccepted && s.checkboxChecked]}>{termsAccepted ? <Feather name="check" size={15} color={palette.white} /> : null}</View>
                 <Text style={s.termsText}>{t('auth.terms')}</Text>
               </Pressable>
+              <View style={s.authLegalLinks}>
+                <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(product.termsUrl)}><Text style={s.inlineLink}>{t('support.terms')}</Text></Pressable>
+                <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(product.privacyUrl)}><Text style={s.inlineLink}>{t('support.privacy')}</Text></Pressable>
+              </View>
               <FieldError message={errors.terms} />
             </> : null}
 
             <FieldError message={errors.form} centered />
-            <ActionButton label={hasAccount ? t('auth.login') : t('auth.createAction')} icon="arrow-left" onPress={submit} fullWidth />
-            {hasAccount ? <Pressable accessibilityRole="button" accessibilityLabel={t('auth.forgot')} onPress={resetLocalAccount} style={({ pressed }) => [s.authReset, pressed && s.pressed]}><Text style={s.authResetText}>{t('auth.forgot')}</Text></Pressable> : null}
-            <View style={s.authSecurity}><Feather name="lock" size={17} color={palette.teal} /><Text style={s.authSecurityText}>{t('auth.localSecurity')}</Text></View>
+            {notice ? <View style={s.authNotice}><Feather name="check-circle" size={17} color={palette.teal} /><Text style={s.authSecurityText}>{notice}</Text></View> : null}
+            <ActionButton
+              label={mode === 'forgot' ? t('auth.sendReset') : mode === 'verify' ? t('auth.resend') : isRecovery ? t('auth.updatePassword') : isSignup ? t('auth.createAction') : t('auth.login')}
+              icon={mode === 'forgot' || mode === 'verify' ? 'mail' : 'arrow-left'}
+              onPress={() => void submit()}
+              fullWidth
+              disabled={busy}
+            />
+            {busy ? <ActivityIndicator accessibilityLabel={t('common.loading')} color={palette.primary} /> : null}
+
+            {cloud.configured && (mode === 'login' || mode === 'signup') ? <>
+              {!isSignup ? <>
+                <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: termsAccepted }} onPress={() => { setTermsAccepted((value) => !value); setErrors((items) => ({ ...items, terms: undefined })); }} style={({ pressed }) => [s.termsRow, Boolean(errors.terms) && s.termsRowError, pressed && s.pressed]}>
+                  <View style={[s.checkbox, termsAccepted && s.checkboxChecked]}>{termsAccepted ? <Feather name="check" size={15} color={palette.white} /> : null}</View>
+                  <Text style={s.termsText}>{t('auth.googleTerms')}</Text>
+                </Pressable>
+                <View style={s.authLegalLinks}>
+                  <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(product.termsUrl)}><Text style={s.inlineLink}>{t('support.terms')}</Text></Pressable>
+                  <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(product.privacyUrl)}><Text style={s.inlineLink}>{t('support.privacy')}</Text></Pressable>
+                </View>
+                <FieldError message={errors.terms} />
+              </> : null}
+              <View style={s.authDivider}><View style={s.authDividerLine} /><Text style={s.hint}>{t('auth.or')}</Text><View style={s.authDividerLine} /></View>
+              <ActionButton label={t('auth.google')} icon="globe" variant="secondary" onPress={() => void google()} fullWidth disabled={busy} />
+              <View style={s.authSwitches}>
+                <Pressable accessibilityRole="button" onPress={() => setAuthMode(isSignup ? 'login' : 'signup')} style={({ pressed }) => [s.authReset, pressed && s.pressed]}><Text style={s.authLinkText}>{isSignup ? t('auth.switchLogin') : t('auth.switchSignup')}</Text></Pressable>
+                {mode === 'login' ? <Pressable accessibilityRole="button" onPress={() => setAuthMode('forgot')} style={({ pressed }) => [s.authReset, pressed && s.pressed]}><Text style={s.authResetText}>{t('auth.forgotPassword')}</Text></Pressable> : null}
+              </View>
+            </> : null}
+            {cloud.configured && (mode === 'forgot' || mode === 'verify') ? <Pressable accessibilityRole="button" onPress={() => setAuthMode('login')} style={({ pressed }) => [s.authReset, pressed && s.pressed]}><Text style={s.authLinkText}>{t('auth.backLogin')}</Text></Pressable> : null}
+            {hasLocalAccount ? <Pressable accessibilityRole="button" accessibilityLabel={t('auth.forgot')} onPress={resetLocalAccount} style={({ pressed }) => [s.authReset, pressed && s.pressed]}><Text style={s.authResetText}>{t('auth.forgot')}</Text></Pressable> : null}
+            <View style={s.authSecurity}><Feather name={cloud.configured ? 'cloud' : 'lock'} size={17} color={palette.teal} /><Text style={s.authSecurityText}>{cloud.configured ? t('auth.cloudSecurity') : t('auth.localSecurity')}</Text></View>
             <Notice />
           </MotionView>
         </ScrollView>
@@ -267,8 +449,8 @@ function Home() {
     <Page>
       <Header eyebrow={t('home.eyebrow')} title={t('home.greeting', { name: state.name })} subtitle={t('home.subtitle')} />
       <View style={s.hero}>
-        <View pointerEvents="none" style={s.heroGlow} />
-        <View pointerEvents="none" style={s.heroGlowSmall} />
+        <View style={s.heroGlow} />
+        <View style={s.heroGlowSmall} />
         <View style={s.heroCopy}>
           <Pill icon="zap" text={t('home.today')} />
           <Text style={s.heroTitle}>{legalTitle(next.title, next.englishTitle)}</Text>
@@ -280,12 +462,24 @@ function Home() {
         <View style={s.goalCard}><View style={s.goalIcon}><Feather name="book-open" size={28} color={palette.white} /></View><Text style={s.goalBig}>{formatNumber(completedToday)}/{formatNumber(state.dailyGoal)}</Text><Text style={s.goalCaption}>{t('home.dailyGoal')}</Text><View style={s.goalProgress}><ProgressBar value={(completedToday / state.dailyGoal) * 100} color={palette.white} trackColor={palette.overlayBorder} /></View></View>
       </View>
       <GameStatusCard game={game} onPress={() => nav.navigate('GameHub')} />
+      <AssistantPromo onPress={() => nav.navigate('AIChat')} />
       <View style={s.stats}><Stat icon="award" value={formatNumber(mastery) + '%'} label={t('home.mastery')} color={palette.primary} soft={palette.primarySoft} /><Stat icon="check-circle" value={formatNumber(state.completedLessons.length)} label={t('home.complete')} color={palette.teal} soft={palette.tealSoft} /><Stat icon="refresh-cw" value={formatNumber(due)} label={t('home.reviewReady')} color={palette.rose} soft={palette.roseSoft} /><Stat icon="activity" value={formatNumber(streak)} label={t('home.streak')} color={palette.goldInk} soft={palette.saffronSoft} /></View>
       <HomeInsights analytics={analytics} onPress={() => nav.navigate('Insights')} />
       <SectionTitle title={t('home.pathways')} />
       <View style={s.grid}>{pathways.slice(0, 3).map((item) => <PathCard key={item.id} item={item} onPress={() => nav.navigate('Pathway', { pathwayId: item.id })} />)}</View>
       <Notice />
     </Page>
+  );
+}
+
+function AssistantPromo({ onPress }: { onPress: () => void }) {
+  const { t } = useI18n();
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={t('home.assistant')} onPress={onPress} style={({ pressed }) => [s.assistantPromo, pressed && s.cardPressed]}>
+      <View style={s.assistantPromoIcon}><Feather name="message-circle" size={23} color={palette.white} /></View>
+      <View style={s.flexEnd}><Text style={s.assistantPromoTitle}>{t('home.assistant')}</Text><Text style={s.assistantPromoText}>{t('home.assistantBody')}</Text></View>
+      <DirectionalChevron size={23} color={palette.primary} />
+    </Pressable>
   );
 }
 
@@ -296,11 +490,11 @@ function GameStatusCard({ game, onPress }: { game: GameProfile; onPress: () => v
   const levelTitle = t(`game.level.${game.level.level}`);
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`${t('game.club')}, ${t('common.level')} ${formatNumber(game.level.level)}, ${levelTitle}`} onPress={onPress} style={({ pressed }) => [s.gameStatus, pressed && s.cardPressed]}>
-      <View pointerEvents="none" style={s.gameStatusGlow} />
+      <View style={s.gameStatusGlow} />
       <View style={s.gameStatusTop}>
         <View style={s.levelMedallion}><Feather name={game.level.icon} size={23} color={palette.goldInk} /></View>
         <View style={s.flexEnd}><Text style={s.gameEyebrow}>{t('game.club')} · {t('common.level')} {formatNumber(game.level.level)}</Text><Text style={s.gameStatusTitle}>{levelTitle}</Text></View>
-        <Feather name="chevron-left" size={23} color={palette.onPrimaryMuted} />
+        <DirectionalChevron size={23} color={palette.onPrimaryMuted} />
       </View>
       <View style={s.gameProgressCopy}><Text style={s.gameProgressText}>{game.nextLevel ? t('game.toNext', { count: formatNumber(game.xpToNext) }) : t('game.maxLevel')}</Text><Text style={s.gameXp}>{formatNumber(game.xp)} XP</Text></View>
       <ProgressBar value={game.levelProgress} color={palette.saffron} trackColor={palette.overlayBorder} />
@@ -329,7 +523,7 @@ function GameHubScreen({ navigation }: GameHubProps) {
         <TopBar onBack={navigation.goBack} />
         <MotionView style={s.gameScreenMotion} distance={14} duration={motion.relaxed}>
           <View style={s.gameHero}>
-            <View pointerEvents="none" style={s.gameHeroGlow} />
+            <View style={s.gameHeroGlow} />
             <View style={s.gameHeroMedallion}><Feather name={game.level.icon} size={34} color={palette.goldInk} /></View>
             <View style={s.gameHeroCopy}>
               <Text style={s.gameHeroEyebrow}>{t('common.level')} {formatNumber(game.level.level)} · {formatNumber(game.xp)} XP</Text>
@@ -434,7 +628,7 @@ function PathwayScreen({ route, navigation }: PathProps) {
         return <Pressable key={id} accessibilityRole="button" onPress={() => navigation.navigate('Lesson', { lessonId: id })} style={({ pressed }) => [s.lessonRow, pressed && s.pressed]}>
           <View style={[s.lessonNumber, done && s.done]}>{done ? <Feather name="check" size={18} color={palette.white} /> : <Text style={s.number}>{index + 1}</Text>}</View>
           <View style={s.flexEnd}><Text style={s.cardTitle}>{legalTitle(lesson.title, lesson.englishTitle)}</Text>{secondaryLegalTitle(lesson.title, lesson.englishTitle) ? <Text style={s.englishSmall}>{secondaryLegalTitle(lesson.title, lesson.englishTitle)}</Text> : null}<View style={s.metaRow}><Meta icon="clock" text={t('home.minutes', { count: formatNumber(lesson.duration) })} />{state.quizScores[id] !== undefined ? <Meta icon="award" text={formatNumber(state.quizScores[id]) + '%'} /> : null}</View></View>
-          <Feather name="chevron-left" size={22} color={palette.muted} />
+          <DirectionalChevron size={22} color={palette.muted} />
         </Pressable>;
       })}</View>
       <Notice />
@@ -514,7 +708,7 @@ function LessonScreen({ route, navigation }: LessonProps) {
       <View style={s.lessonTop}><RoundIcon icon="x" label={t('lesson.close')} onPress={navigation.goBack} /><View style={s.flex}><ProgressBar value={progress} /></View><RoundIcon icon="bookmark" label={t('lesson.save')} active={saved} onPress={() => toggleSaved(item.id)} /></View>
       <ScrollView contentContainerStyle={s.lessonPage}>
         <MotionView style={s.lessonMotion} replayKey={`${section}-${quiz}-${finished}`} distance={10}>
-        {finished ? <View style={s.result}><CelebrationBurst icon="award" tone={result >= 70 ? 'success' : 'gold'} /><Text style={s.eyebrow}>{t('lesson.complete')}</Text><Text style={s.pathHeroTitle}>{legalTitle(item.title, item.englishTitle)}</Text><Text style={s.score}>{formatNumber(result)}%</Text><View style={s.rewardRow}><RewardChip icon="zap" value={`+${formatNumber(earnedXp)} XP`} label="XP" /><RewardChip icon="activity" value={formatNumber(bestCombo)} label={t('lesson.chain', { count: formatNumber(bestCombo) })} /></View><Text style={s.centerBody}>{t('lesson.progressSaved')}</Text><ActionButton label={t('lesson.backPath')} icon="arrow-left" onPress={navigation.goBack} fullWidth /></View>
+        {finished ? <View style={s.result}><CelebrationBurst icon="award" tone={result >= 70 ? 'success' : 'gold'} /><Text style={s.eyebrow}>{t('lesson.complete')}</Text><Text style={s.pathHeroTitle}>{legalTitle(item.title, item.englishTitle)}</Text><Text style={s.score}>{formatNumber(result)}%</Text><View style={s.rewardRow}><RewardChip icon="zap" value={`+${formatNumber(earnedXp)} XP`} label="XP" /><RewardChip icon="activity" value={formatNumber(bestCombo)} label={t('lesson.chain', { count: formatNumber(bestCombo) })} /></View><Text style={s.centerBody}>{t('lesson.progressSaved')}</Text><ActionButton label={t('lesson.backPath')} icon="arrow-right" onPress={navigation.goBack} fullWidth /></View>
         : quiz < 0 ? <LessonSection item={item} index={section} />
         : question ? <QuizCard question={question} selected={selected} revealed={revealed} combo={combo} onSelect={setSelected} /> : null}
         </MotionView>
@@ -555,7 +749,7 @@ function QuizCard({ question, selected, revealed, combo = 0, onSelect }: { quest
 
 function CelebrationBurst({ icon, tone }: { icon: IconName; tone: 'success' | 'gold' }) {
   const color = tone === 'success' ? palette.success : palette.saffron;
-  return <View style={s.celebrationStage} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none">
+  return <View style={s.celebrationStage} accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
     {[s.sparkOne, s.sparkTwo, s.sparkThree, s.sparkFour, s.sparkFive, s.sparkSix].map((position, index) => <MotionView key={index} style={[s.celebrationSpark, position]} delay={index * 35} distance={index % 2 ? 10 : -10} duration={motion.standard}><Feather name={index % 2 ? 'star' : 'circle'} size={index % 2 ? 17 : 10} color={index % 3 ? palette.saffron : palette.primary} /></MotionView>)}
     <MotionView style={[s.resultIcon, { backgroundColor: color }]} distance={12} duration={motion.relaxed}><Feather name={icon} size={38} color={palette.white} /></MotionView>
   </View>;
@@ -642,7 +836,7 @@ function TestScreen({ route, navigation }: TestProps) {
       const subjectCorrect = subjectQuestions.filter((item) => answers[item.id] === item.correctIndex).length;
       return { subject, total: subjectQuestions.length, correct: subjectCorrect, score: subjectQuestions.length ? Math.round(subjectCorrect / subjectQuestions.length * 100) : 0 };
     }).filter((item) => item.total);
-    return <SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.testPage}><TopBar onBack={navigation.goBack} /><View style={s.result}><CelebrationBurst icon={score>=70?'award':'trending-up'} tone={score>=70?'success':'gold'} /><Text style={s.eyebrow}>{t('test.result', { stage })}</Text><Text style={s.pathHeroTitle}>{modeTitle}</Text><Text style={s.score}>{formatNumber(score)}%</Text><View style={s.rewardRow}><RewardChip icon="zap" value={`+${formatNumber(earnedXp)} XP`} label="XP" /><RewardChip icon="check-circle" value={formatNumber(correct)} label={t('common.correct')} /></View><Text style={s.centerBody}>{formatNumber(correct)}/{formatNumber(questions.length)} {t('common.correct')}</Text></View><SectionTitle title={t('test.breakdown')} /><View style={s.list}>{breakdown.map(({subject,total,correct:subjectCorrect,score:subjectScore})=><View key={subject.id} style={s.breakdownRow}><View style={s.flexEnd}><Text style={s.modeTitle}>{legalTitle(subject.title, subject.englishTitle)}</Text><Text style={s.hint}>{formatNumber(subjectCorrect)}/{formatNumber(total)} {t('common.correct')}</Text></View><View style={s.breakdownScore}><Text style={s.smallStrong}>{formatNumber(subjectScore)}%</Text></View></View>)}</View><ActionButton label={t('test.back')} icon="arrow-left" onPress={navigation.goBack} fullWidth /><Notice /></ScrollView></SafeAreaView>;
+    return <SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.testPage}><TopBar onBack={navigation.goBack} /><View style={s.result}><CelebrationBurst icon={score>=70?'award':'trending-up'} tone={score>=70?'success':'gold'} /><Text style={s.eyebrow}>{t('test.result', { stage })}</Text><Text style={s.pathHeroTitle}>{modeTitle}</Text><Text style={s.score}>{formatNumber(score)}%</Text><View style={s.rewardRow}><RewardChip icon="zap" value={`+${formatNumber(earnedXp)} XP`} label="XP" /><RewardChip icon="check-circle" value={formatNumber(correct)} label={t('common.correct')} /></View><Text style={s.centerBody}>{formatNumber(correct)}/{formatNumber(questions.length)} {t('common.correct')}</Text></View><SectionTitle title={t('test.breakdown')} /><View style={s.list}>{breakdown.map(({subject,total,correct:subjectCorrect,score:subjectScore})=><View key={subject.id} style={s.breakdownRow}><View style={s.flexEnd}><Text style={s.modeTitle}>{legalTitle(subject.title, subject.englishTitle)}</Text><Text style={s.hint}>{formatNumber(subjectCorrect)}/{formatNumber(total)} {t('common.correct')}</Text></View><View style={s.breakdownScore}><Text style={s.smallStrong}>{formatNumber(subjectScore)}%</Text></View></View>)}</View><ActionButton label={t('test.back')} icon="arrow-right" onPress={navigation.goBack} fullWidth /><Notice /></ScrollView></SafeAreaView>;
   }
 
   if (inBreak) {
@@ -709,7 +903,7 @@ function Practice() {
   };
   return <Page>
     <Header eyebrow="SQE1" title={t('practice.title')} subtitle={t('practice.subtitle', { count: formatNumber(sqeTotals.practiceQuestions) })} />
-    <View style={s.examGrid}>{(['FLK1','FLK2'] as SqeStage[]).map((stage) => <View key={stage} style={s.examPanel}><View style={s.between}><View style={[s.pathIcon,{backgroundColor:stage==='FLK1'?palette.primarySoft:palette.tealSoft}]}><Feather name={stage==='FLK1'?'briefcase':'home'} size={23} color={stage==='FLK1'?palette.primary:palette.teal} /></View><View style={s.flexEnd}><Text style={s.examStage}>{stage}</Text><Text style={s.hint}>{formatNumber(stageSubjects(stage).length)} · {best(stage)}</Text></View></View><View style={s.list}>{modes.map((item) => <Pressable key={item.mode} accessibilityRole="button" onPress={() => nav.navigate('Test',{stage,count:item.count,mode:item.mode})} style={({pressed})=>[s.modeRow,pressed&&s.pressed]}><View style={s.modeIcon}><Feather name={item.icon} size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.modeTitle}>{item.title}</Text><Text style={s.hint}>{item.subtitle}</Text></View><Feather name="chevron-left" size={20} color={palette.muted} /></Pressable>)}</View></View>)}</View>
+    <View style={s.examGrid}>{(['FLK1','FLK2'] as SqeStage[]).map((stage) => <View key={stage} style={s.examPanel}><View style={s.between}><View style={[s.pathIcon,{backgroundColor:stage==='FLK1'?palette.primarySoft:palette.tealSoft}]}><Feather name={stage==='FLK1'?'briefcase':'home'} size={23} color={stage==='FLK1'?palette.primary:palette.teal} /></View><View style={s.flexEnd}><Text style={s.examStage}>{stage}</Text><Text style={s.hint}>{formatNumber(stageSubjects(stage).length)} · {best(stage)}</Text></View></View><View style={s.list}>{modes.map((item) => <Pressable key={item.mode} accessibilityRole="button" onPress={() => nav.navigate('Test',{stage,count:item.count,mode:item.mode})} style={({pressed})=>[s.modeRow,pressed&&s.pressed]}><View style={s.modeIcon}><Feather name={item.icon} size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.modeTitle}>{item.title}</Text><Text style={s.hint}>{item.subtitle}</Text></View><DirectionalChevron size={20} color={palette.muted} /></Pressable>)}</View></View>)}</View>
     <View style={s.examNote}><Feather name="info" size={20} color={palette.primary} /><View style={s.flexEnd}><Text style={s.smallStrong}>{t('practice.full')}</Text><Text style={s.hint}>{t('practice.subtitle', { count: formatNumber(180) })} · Annex 4 · 2 × 90 · 2 × 153 min</Text></View></View>
     <SectionTitle title={t('practice.recent')} />
     {state.testHistory.length ? <View style={s.list}>{state.testHistory.slice(0,6).map((item)=><View key={item.id} style={s.historyRow}><View style={[s.scoreBadge,{backgroundColor:item.score>=70?palette.tealSoft:palette.saffronSoft}]}><Text style={s.scoreBadgeText}>{formatNumber(item.score)}%</Text></View><View style={s.flexEnd}><Text style={s.cardTitle}>{item.stage} · {formatNumber(item.total)} {t('common.questions')}</Text><Text style={s.hint}>{new Date(item.completedAt).toLocaleDateString(locale)} · {formatNumber(item.correct)} {t('common.correct')}</Text></View></View>)}</View>:<Empty icon="bar-chart-2" title={t('practice.empty')} body={t('practice.subtitle', { count: formatNumber(sqeTotals.practiceQuestions) })} />}
@@ -731,7 +925,7 @@ function InsightsScreen({ navigation }: InsightsProps) {
         <TopBar onBack={navigation.goBack} />
         <MotionView style={s.insightsMotion} distance={14} duration={motion.relaxed}>
           <View style={s.insightsHero}>
-            <View pointerEvents="none" style={s.insightsGlow} />
+            <View style={s.insightsGlow} />
             <View style={s.readinessScore}><Text style={s.readinessNumber}>{formatNumber(analytics.readiness)}%</Text><Text style={s.readinessCaption}>{t('insights.index')}</Text></View>
             <View style={s.insightsHeroCopy}><View style={s.insightsBadge}><Feather name="activity" size={15} color={palette.goldInk} /><Text style={s.insightsBadgeText}>{readinessLabel}</Text></View><Text style={s.insightsTitle}>{t('insights.reportTitle')}</Text><Text style={s.insightsSubtitle}>{t('insights.reportSubtitle')}</Text><View style={s.readinessProgress}><ProgressBar value={analytics.readiness} color={palette.saffron} trackColor={palette.overlayBorder} /></View><Text style={s.readinessTarget}>{t('insights.target')}</Text></View>
           </View>
@@ -797,7 +991,8 @@ function SubjectBullet({ item }: { item: SubjectInsight }) {
 }
 
 function Profile() {
-  const { state, streak, updateSettings, signOut, resetProgress } = useLearner();
+  const nav = useRootNav();
+  const { state, cloud, streak, updateSettings, signOut, resetProgress } = useLearner();
   const { previewTap } = useSoundFeedback();
   const { t, formatNumber, isRtl } = useI18n();
   const [name, setName] = useState(state.name);
@@ -813,7 +1008,7 @@ function Profile() {
   const reset = () => Alert.alert(t('profile.resetTitle'), t('profile.resetBody'), [{ text: t('profile.cancel'), style: 'cancel' }, { text: t('profile.erase'), style: 'destructive', onPress: () => void resetProgress() }]);
   return (
     <Page>
-      <Header eyebrow={t('profile.eyebrow')} title={t('profile.title')} subtitle={t('profile.subtitle')} />
+      <Header eyebrow={t('profile.eyebrow')} title={t('profile.title')} subtitle={state.accountMode === 'cloud' ? t('profile.cloudSubtitle') : t('profile.subtitle')} />
       <View style={s.profile}>
         <View style={s.avatar}><Feather name="user" size={30} color={palette.white} /></View>
         <View style={s.flexEnd}><Text style={s.profileName}>{state.name}</Text><Text style={s.profileHandle}>@{state.username}</Text><Text style={s.profileMeta}>{formatNumber(state.completedLessons.length)} {t('common.lessons')} · {formatNumber(streak)} {t('home.streak')}</Text></View>
@@ -826,7 +1021,8 @@ function Profile() {
           <Pressable accessibilityRole="button" accessibilityLabel={t('common.save')} onPress={saveName} style={({ pressed }) => [s.save, pressed && s.pressed]}><Text style={s.saveText}>{t('common.save')}</Text></Pressable>
         </View>
         <FieldError message={nameError} />
-        <View style={s.accountIdentity}><View style={s.iconSmall}><Feather name="at-sign" size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.label}>{t('auth.username')}</Text><Text style={s.accountUsername}>{state.username}</Text></View></View>
+        <View style={s.accountIdentity}><View style={s.iconSmall}><Feather name="at-sign" size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.label}>{t('auth.username')}</Text><Text style={s.accountUsername}>{state.username}</Text>{state.email ? <Text style={s.accountEmail}>{state.email}</Text> : null}</View></View>
+        {state.accountMode === 'cloud' ? <View style={s.accountIdentity}><View style={s.iconSmall}><Feather name="cloud" size={19} color={cloud.syncStatus === 'error' ? palette.rose : palette.teal} /></View><View style={s.flexEnd}><Text style={s.label}>{t('profile.cloudSync')}</Text><Text style={s.hint}>{cloud.syncStatus === 'syncing' ? t('profile.syncing') : cloud.syncStatus === 'error' ? t('profile.syncError') : t('profile.synced')}</Text></View></View> : null}
         <Text style={s.label}>{t('auth.dailyGoal')}</Text>
         <GoalPicker value={state.dailyGoal} onChange={(dailyGoal) => updateSettings({ dailyGoal })} />
       </View>
@@ -851,13 +1047,157 @@ function Profile() {
       <View style={s.settings}>
         <Text style={s.sectionTitle}>{t('profile.contentTransparency')}</Text>
         <View style={s.settingRow}><View style={s.iconSmall}><Feather name="database" size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>{t('profile.specCurrent')}</Text><Text style={s.hint}>{t('profile.specSummary', { lessons: formatNumber(sqeTotals.lessons), stations: formatNumber(sqeTotals.sqe2Stations) })}</Text></View></View>
-        <View style={s.settingRow}><View style={s.iconSmall}><Feather name="lock" size={19} color={palette.teal} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>{t('profile.offlinePrivacy')}</Text><Text style={s.hint}>PIN · offline-first · no analytics SDK</Text></View></View>
+        <View style={s.settingRow}><View style={s.iconSmall}><Feather name="lock" size={19} color={palette.teal} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>{state.accountMode === 'cloud' ? t('profile.cloudPrivacy') : t('profile.offlinePrivacy')}</Text><Text style={s.hint}>{state.accountMode === 'cloud' ? t('profile.cloudPrivacyDetail') : 'PIN · offline-first · no analytics SDK'}</Text></View></View>
         <View style={s.settingRow}><View style={s.iconSmall}><Feather name="alert-circle" size={19} color={palette.rose} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>{t('profile.independent')}</Text><Text style={s.hint}>{t('profile.independentDetail')}</Text></View></View>
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel={t('profile.signOut')} onPress={signOut} style={({ pressed }) => [s.signOut, pressed && s.pressed]}><Feather name="log-out" size={18} color={palette.primary} /><Text style={s.signOutText}>{t('profile.signOut')}</Text></Pressable>
+      <View style={s.settings}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('assistant.title')} onPress={() => nav.navigate('AIChat')} style={({ pressed }) => [s.supportEntry, pressed && s.pressed]}><View style={s.iconSmall}><Feather name="message-circle" size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.modeTitle}>{t('assistant.title')}</Text><Text style={s.hint}>{onlineAssistantConfigured ? t('assistant.online') : t('assistant.offline')}</Text></View><DirectionalChevron size={20} color={palette.muted} /></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('support.title')} onPress={() => nav.navigate('Support')} style={({ pressed }) => [s.supportEntry, pressed && s.pressed]}><View style={s.iconSmall}><Feather name="help-circle" size={19} color={palette.teal} /></View><View style={s.flexEnd}><Text style={s.modeTitle}>{t('support.title')}</Text><Text style={s.hint}>{t('support.subtitle')}</Text></View><DirectionalChevron size={20} color={palette.muted} /></Pressable>
+      </View>
+      <Pressable accessibilityRole="button" accessibilityLabel={t('profile.signOut')} onPress={() => void signOut()} style={({ pressed }) => [s.signOut, pressed && s.pressed]}><Feather name="log-out" size={18} color={palette.primary} /><Text style={s.signOutText}>{t('profile.signOut')}</Text></Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel={t('profile.reset')} onPress={reset} style={({ pressed }) => [s.danger, pressed && s.pressed]}><Feather name="trash-2" size={18} color={palette.rose} /><Text style={s.dangerText}>{t('profile.reset')}</Text></Pressable>
       <Notice />
     </Page>
+  );
+}
+
+type AIChatProps = NativeStackScreenProps<RootStackParamList, 'AIChat'>;
+function AIChatScreen({ navigation }: AIChatProps) {
+  const { state } = useLearner();
+  const { t, language, isRtl } = useI18n();
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const scroll = useRef<ScrollView>(null);
+  useEffect(() => {
+    requestAnimationFrame(() => scroll.current?.scrollToEnd({ animated: true }));
+  }, [messages, busy]);
+
+  const send = async (suggested?: string) => {
+    const text = (suggested ?? input).trim();
+    if (!text || busy) return;
+    if (text.length > 2_000) {
+      setError(t('assistant.tooLong'));
+      return;
+    }
+    const userMessage: ChatMessage = { id: `user-${Date.now()}`, role: 'user', text };
+    const nextMessages = [...messages, userMessage];
+    setMessages(nextMessages);
+    setInput('');
+    setError('');
+    setBusy(true);
+    try {
+      const answer = await askStudyAssistant({
+        messages: nextMessages,
+        language,
+        safetyId: privacySafeLearnerId(state.username),
+      });
+      setMessages((current) => [...current, { id: `assistant-${Date.now()}`, role: 'assistant', ...answer }]);
+    } catch {
+      setError(t('assistant.error'));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const clear = () => Alert.alert(t('assistant.clearTitle'), t('assistant.clearBody'), [
+    { text: t('profile.cancel'), style: 'cancel' },
+    { text: t('assistant.clear'), style: 'destructive', onPress: () => { setMessages([]); setError(''); } },
+  ]);
+
+  return (
+    <SafeAreaView style={s.safe}>
+      <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={s.chatPage}>
+          <TopBar onBack={navigation.goBack} />
+          <View style={s.chatHeading}>
+            <View style={s.chatHeadingIcon}><Feather name="message-circle" size={24} color={palette.white} /></View>
+            <View style={s.flexEnd}><Text style={s.eyebrow}>{t('assistant.eyebrow')}</Text><Text style={s.pageTitle}>{t('assistant.title')}</Text><Text style={s.body}>{t('assistant.subtitle')}</Text></View>
+          </View>
+          <View style={s.assistantMode}><Feather name={onlineAssistantConfigured ? 'cloud' : 'book-open'} size={16} color={onlineAssistantConfigured ? palette.teal : palette.goldInk} /><Text style={s.assistantModeText}>{onlineAssistantConfigured ? t('assistant.online') : t('assistant.offline')}</Text></View>
+          <View style={s.assistantPrivacy}><Feather name="shield" size={17} color={palette.rose} /><Text style={s.assistantPrivacyText}>{t('assistant.privacy')}</Text></View>
+          <ScrollView ref={scroll} style={s.chatMessages} contentContainerStyle={s.chatMessagesContent} keyboardShouldPersistTaps="handled">
+            {!messages.length ? <View style={s.chatEmpty}><Text style={s.centerBody}>{t('assistant.empty')}</Text><Text style={s.label}>{t('assistant.suggestions')}</Text><View style={s.suggestionList}>{assistantSuggestions[language].map((suggestion) => <Pressable key={suggestion} accessibilityRole="button" onPress={() => void send(suggestion)} style={({ pressed }) => [s.suggestion, pressed && s.pressed]}><Text style={s.suggestionText}>{suggestion}</Text><DirectionalChevron size={17} color={palette.primary} /></Pressable>)}</View></View> : null}
+            {messages.map((message) => <View key={message.id} style={[s.chatBubble, message.role === 'user' ? s.chatBubbleUser : s.chatBubbleAssistant]}><Text style={[s.chatBubbleText, message.role === 'user' && s.chatBubbleTextUser]}>{message.text}</Text>{message.role === 'assistant' ? <Text style={s.chatSource}>{message.mode === 'online' ? t('assistant.online') : t('assistant.offline')}</Text> : null}</View>)}
+            {busy ? <View style={[s.chatBubble, s.chatBubbleAssistant, s.chatTyping]}><ActivityIndicator color={palette.primary} /><Text style={s.hint}>{t('common.loading')}</Text></View> : null}
+            {error ? <FieldError message={error} /> : null}
+          </ScrollView>
+          <View style={s.chatComposer}>
+            <TextInput value={input} onChangeText={(value) => { setInput(value); setError(''); }} placeholder={t('assistant.placeholder')} placeholderTextColor={palette.muted} multiline maxLength={2_000} textAlign={isRtl ? 'right' : 'left'} style={s.chatInput} accessibilityLabel={t('assistant.placeholder')} />
+            <Pressable accessibilityRole="button" accessibilityLabel={t('assistant.send')} accessibilityState={{ disabled: busy || !input.trim() }} disabled={busy || !input.trim()} onPress={() => void send()} style={({ pressed }) => [s.chatSend, (busy || !input.trim()) && s.disabled, pressed && s.pressed]}><Feather name={isRtl ? 'arrow-left' : 'arrow-right'} size={20} color={palette.white} /></Pressable>
+          </View>
+          {messages.length ? <Pressable accessibilityRole="button" onPress={clear} style={({ pressed }) => [s.chatClear, pressed && s.pressed]}><Feather name="trash-2" size={15} color={palette.muted} /><Text style={s.hint}>{t('assistant.clear')}</Text></Pressable> : null}
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const openExternal = async (url: string) => {
+  if (await Linking.canOpenURL(url)) await Linking.openURL(url);
+};
+
+type SupportProps = NativeStackScreenProps<RootStackParamList, 'Support'>;
+function SupportScreen({ navigation }: SupportProps) {
+  const { state, deleteAccount } = useLearner();
+  const { t } = useI18n();
+  const deleteTitle = state.accountMode === 'cloud' ? t('support.deleteCloud') : t('support.delete');
+  const deleteBody = state.accountMode === 'cloud' ? t('support.deleteCloudBody') : t('support.deleteBody');
+  const erase = () => Alert.alert(deleteTitle, deleteBody, [
+    { text: t('profile.cancel'), style: 'cancel' },
+    {
+      text: t('auth.resetLocalAction'),
+      style: 'destructive',
+      onPress: () => {
+        void deleteAccount().then((result) => {
+          if (!result.ok) Alert.alert(t('support.deleteFailed'), t('support.deleteFailedBody'));
+        });
+      },
+    },
+  ]);
+  return (
+    <SafeAreaView style={s.safe}>
+      <ScrollView contentContainerStyle={s.detailPage}>
+        <TopBar onBack={navigation.goBack} />
+        <Header eyebrow={t('support.eyebrow')} title={t('support.title')} subtitle={t('support.subtitle')} />
+        <View style={s.supportGroup}>
+          <SupportRow icon="help-circle" title={t('support.contact')} body={t('support.contactBody')} onPress={() => void openExternal(product.supportUrl)} />
+          <SupportRow icon="alert-triangle" title={t('support.report')} body={t('support.reportBody')} onPress={() => void openExternal(product.contentReportUrl)} />
+          <SupportRow icon="shield" title={t('support.privacyRequest')} body={t('support.privacyRequestBody')} onPress={() => void openExternal(product.privacyRequestUrl)} />
+        </View>
+        <View style={s.supportGroup}>
+          <SupportRow icon="lock" title={t('support.privacy')} body={t('support.readInApp')} onPress={() => navigation.navigate('Legal', { document: 'privacy' })} />
+          <SupportRow icon="file-text" title={t('support.terms')} body={t('support.readInApp')} onPress={() => navigation.navigate('Legal', { document: 'terms' })} />
+          <SupportRow icon="copy" title={t('support.rights')} body={t('support.readInApp')} onPress={() => navigation.navigate('Legal', { document: 'rights' })} />
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel={deleteTitle} onPress={erase} style={({ pressed }) => [s.dangerSupport, pressed && s.pressed]}><Feather name="trash-2" size={18} color={palette.rose} /><View style={s.flexEnd}><Text style={s.dangerText}>{deleteTitle}</Text><Text style={s.hint}>{deleteBody}</Text></View></Pressable>
+        <Text style={s.supportVersion}>{t('support.version', { version: product.version })} · {product.copyright}</Text>
+        <Notice />
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function SupportRow({ icon, title, body, onPress }: { icon: IconName; title: string; body: string; onPress: () => void }) {
+  return <Pressable accessibilityRole="button" accessibilityLabel={title} onPress={onPress} style={({ pressed }) => [s.supportRow, pressed && s.pressed]}><View style={s.iconSmall}><Feather name={icon} size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.modeTitle}>{title}</Text><Text style={s.hint}>{body}</Text></View><DirectionalChevron size={20} color={palette.muted} /></Pressable>;
+}
+
+type LegalProps = NativeStackScreenProps<RootStackParamList, 'Legal'>;
+function LegalScreen({ route, navigation }: LegalProps) {
+  const { t } = useI18n();
+  const document = legalDocuments[route.params.document];
+  const publicUrl = route.params.document === 'privacy' ? product.privacyUrl : route.params.document === 'terms' ? product.termsUrl : product.rightsUrl;
+  return (
+    <SafeAreaView style={s.safe}>
+      <ScrollView contentContainerStyle={s.detailPage}>
+        <TopBar onBack={navigation.goBack} />
+        <View style={s.legalHero}><View style={s.iconHero}><Feather name={route.params.document === 'privacy' ? 'lock' : route.params.document === 'terms' ? 'file-text' : 'copy'} size={27} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.pageTitle}>{document.title}</Text><Text style={s.hint}>{t('legal.updated', { date: document.updated })}</Text></View></View>
+        <View style={s.legalDocument}>{document.sections.map((section) => <View key={section.heading} style={s.legalSection}><Text style={s.sectionTitle}>{section.heading}</Text><Text style={s.body}>{section.body}</Text></View>)}</View>
+        <ActionButton label={t('support.openWeb')} icon="external-link" variant="secondary" onPress={() => void openExternal(publicUrl)} />
+        <Text style={s.supportVersion}>{product.copyright}</Text>
+        <Notice />
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -912,6 +1252,7 @@ function Header({ eyebrow, title, subtitle }: { eyebrow: string; title: string; 
   return <View style={s.header}><Brand /><View style={s.flexEnd}><View style={s.headerEyebrow}><View style={s.headerDot} /><Text style={s.eyebrow}>{eyebrow}</Text></View><Text style={s.pageTitle}>{title}</Text><Text style={s.body}>{subtitle}</Text></View></View>;
 }
 function TopBar({ onBack }: { onBack: () => void }) { const { t, isRtl } = useI18n(); return <View style={s.topBar}><Brand /><RoundIcon icon={isRtl ? 'arrow-right' : 'arrow-left'} label={t('common.back')} onPress={onBack} /></View>; }
+function DirectionalChevron({ size, color }: { size: number; color: string }) { const { isRtl } = useI18n(); return <Feather name={isRtl ? 'chevron-left' : 'chevron-right'} size={size} color={color} />; }
 function RoundIcon({ icon, label, onPress, active }: { icon: IconName; label: string; onPress: () => void; active?: boolean }) { return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [s.round, pressed && s.pressed]}><Feather name={icon} size={21} color={active ? palette.primary : palette.ink} /></Pressable>; }
 function GoalPicker({ value, onChange }: { value: number; onChange: (value: number) => void }) { const { t, formatNumber } = useI18n(); return <View style={s.goalRow}>{[1, 2, 3].map((item) => <Pressable key={item} accessibilityRole="radio" accessibilityLabel={`${formatNumber(item)} ${t('common.lessons')}`} accessibilityState={{ checked: value === item }} onPress={() => onChange(item)} style={({ pressed }) => [s.goalChoice, value === item && s.goalActive, pressed && s.pressed]}><Text style={[s.goalNumber, value === item && s.goalNumberActive]}>{formatNumber(item)}</Text><Text style={s.hint}>{t('common.lesson')}</Text></Pressable>)}</View>; }
 function SectionTitle({ title }: { title: string }) { return <View style={s.sectionHeading}><View style={s.sectionMarker} /><Text style={s.sectionTitle}>{title}</Text></View>; }
@@ -924,6 +1265,11 @@ function PathCard({ item, onPress }: { item: Pathway; onPress: () => void }) {
   const complete = item.lessonIds.filter((id) => state.completedLessons.includes(id)).length;
   const percent = Math.round((complete / item.lessonIds.length) * 100);
   const progressLabel = percent ? `${formatNumber(percent)}% ${t('common.completed')}` : t('common.notStarted');
+  const levelLabel = item.track === 'SQE2'
+    ? t('learn.level.practical')
+    : item.track
+      ? item.level
+      : t(item.id === 'immigration' ? 'learn.level.beginnerIntermediate' : ['housing', 'police'].includes(item.id) ? 'learn.level.applied' : 'learn.level.beginner');
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`${legalTitle(item.title, item.englishTitle)}, ${progressLabel}`} onPress={onPress} style={({ pressed }) => [s.pathCard, pressed && s.pathCardPressed]}>
       <ImageBackground source={subjectArtFor(item.id)} resizeMode="cover" style={s.pathArtwork} imageStyle={s.pathArtworkImage} accessible={false} accessibilityIgnoresInvertColors>
@@ -933,7 +1279,7 @@ function PathCard({ item, onPress }: { item: Pathway; onPress: () => void }) {
         <View style={s.pathCardContent}>
           <View style={s.between}>
             <View style={s.pathIconOnImage}><Feather name={item.icon} size={22} color={palette.white} /></View>
-            <View style={s.pathLevel}><Text style={s.pathLevelText}>{item.level}</Text></View>
+            <View style={s.pathLevel}><Text style={s.pathLevelText}>{levelLabel}</Text></View>
           </View>
           <View style={s.pathCopyOnImage}>
             <Text style={s.pathTitleOnImage}>{legalTitle(item.title, item.englishTitle)}</Text>
@@ -955,13 +1301,15 @@ function useRootNav() { return useNavigation<NativeStackNavigationProp<RootStack
 
 const createStyles = (palette: AppPalette, isRtl = true) => {
   const shadow = createShadow(palette);
-  const rowDirection = isRtl ? 'row-reverse' : 'row';
+  // Web follows document.dir; reversing again here would turn RTL rows back into LTR.
+  const rowDirection = Platform.OS === 'web' ? 'row' : isRtl ? 'row-reverse' : 'row';
   const logicalEnd = isRtl ? 'flex-end' : 'flex-start';
   return StyleSheet.create({
   flex: { flex: 1 },
   flexEnd: { flex: 1, alignItems: logicalEnd },
   safe: { flex: 1, backgroundColor: palette.background },
   pressed: { opacity: 0.84, transform: [{ scale: 0.985 }] },
+  disabled: { opacity: 0.5 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, backgroundColor: palette.background },
   loadingLogo: { width: 62, height: 62, borderRadius: 21, backgroundColor: palette.primaryAction, alignItems: 'center', justifyContent: 'center' },
   tabsMobile: { position: 'absolute', left: 12, right: 12, bottom: 10, height: 82, paddingHorizontal: 6, paddingTop: 6, paddingBottom: 6, borderTopWidth: 0, borderWidth: 1, borderColor: palette.line, borderRadius: 26, backgroundColor: palette.surface, ...shadow },
@@ -1001,11 +1349,18 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   checkbox: { width: 25, height: 25, borderRadius: 8, borderWidth: 2, borderColor: palette.line, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   checkboxChecked: { borderColor: palette.primaryAction, backgroundColor: palette.primaryAction },
   termsText: { flex: 1, color: palette.inkSoft, fontSize: 12, lineHeight: 21, textAlign: 'right', writingDirection: 'rtl' },
+  authLegalLinks: { flexDirection: rowDirection, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 18 },
+  inlineLink: { color: palette.primary, fontSize: 12, lineHeight: 20, fontWeight: '900', textDecorationLine: 'underline' },
   authSecurity: { flexDirection: rowDirection, alignItems: 'center', gap: 8, padding: 12, borderRadius: radius.md, backgroundColor: palette.tealSoft },
+  authNotice: { flexDirection: rowDirection, alignItems: 'center', gap: 8, padding: 12, borderWidth: 1, borderColor: palette.teal, borderRadius: radius.md, backgroundColor: palette.tealSoft },
+  authDivider: { flexDirection: rowDirection, alignItems: 'center', gap: 10 },
+  authDividerLine: { flex: 1, height: 1, backgroundColor: palette.line },
+  authSwitches: { flexDirection: rowDirection, flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
   authLanguage: { gap: 12, padding: 14, borderRadius: radius.lg, backgroundColor: palette.surfaceMuted, borderWidth: 1, borderColor: palette.line },
   authSecurityText: { flex: 1, color: palette.tealInk, fontSize: 11, lineHeight: 19, textAlign: 'right', writingDirection: 'rtl' },
   authReset: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   authResetText: { color: palette.rose, fontSize: 12, fontWeight: '800', writingDirection: 'rtl' },
+  authLinkText: { color: palette.primary, fontSize: 12, fontWeight: '800', writingDirection: 'rtl' },
   header: { gap: 25 },
   headerEyebrow: { flexDirection: rowDirection, alignItems: 'center', gap: 8, marginBottom: 6 },
   headerDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: palette.saffron },
@@ -1016,7 +1371,8 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   label: { color: palette.ink, fontSize: 14, fontWeight: '800', textAlign: 'right', writingDirection: 'rtl' },
   hint: { color: palette.muted, fontSize: 11, lineHeight: 19, textAlign: 'right', writingDirection: 'rtl' },
   muted: { color: palette.muted, fontSize: 14, writingDirection: 'rtl' },
-  input: { minHeight: 52, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.background, borderRadius: radius.md, paddingHorizontal: 15, color: palette.ink, fontSize: 16, writingDirection: 'rtl' },
+  input: { minHeight: 52, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.background, borderRadius: radius.md, paddingHorizontal: 15, color: palette.ink, fontSize: 16, writingDirection: isRtl ? 'rtl' : 'ltr' },
+  ltrInput: { writingDirection: 'ltr' },
   iconHero: { width: 54, height: 54, borderRadius: 18, backgroundColor: palette.primarySoft, alignItems: 'center', justifyContent: 'center' },
   iconSmall: { width: 42, height: 42, borderRadius: 14, backgroundColor: palette.primarySoft, alignItems: 'center', justifyContent: 'center' },
   goalRow: { flexDirection: rowDirection, gap: 10 },
@@ -1025,8 +1381,8 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   goalNumber: { color: palette.ink, fontSize: 20, fontFamily: type.latinBold },
   goalNumberActive: { color: palette.primary },
   hero: { position: 'relative', overflow: 'hidden', flexDirection: rowDirection, flexWrap: 'wrap', gap: 22, padding: 23, borderWidth: 1, borderColor: palette.line, borderRadius: radius.xl, backgroundColor: palette.surface, ...shadow },
-  heroGlow: { position: 'absolute', width: 260, height: 260, borderRadius: 130, top: -150, left: -80, backgroundColor: palette.primarySoft, opacity: 0.72 },
-  heroGlowSmall: { position: 'absolute', width: 120, height: 120, borderRadius: 60, bottom: -70, right: 120, backgroundColor: palette.saffronSoft, opacity: 0.62 },
+  heroGlow: { position: 'absolute', width: 260, height: 260, borderRadius: 130, top: -150, left: -80, backgroundColor: palette.primarySoft, opacity: 0.72, pointerEvents: 'none' },
+  heroGlowSmall: { position: 'absolute', width: 120, height: 120, borderRadius: 60, bottom: -70, right: 120, backgroundColor: palette.saffronSoft, opacity: 0.62, pointerEvents: 'none' },
   heroCopy: { flex: 2, minWidth: 260, alignItems: logicalEnd, gap: 8 },
   heroTitle: { color: palette.ink, fontSize: 26, lineHeight: 38, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
   goalCard: { flex: 1, minWidth: 180, minHeight: 210, padding: 20, borderRadius: radius.lg, backgroundColor: palette.brandSurface, alignItems: 'center', justifyContent: 'center', gap: 7 },
@@ -1045,6 +1401,10 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   statAccent: { position: 'absolute', top: 0, right: 0, bottom: 0, width: 4 },
   statValue: { color: palette.ink, fontSize: 24, fontFamily: type.latinBold, marginTop: 10 },
   insightsTeaser: { position: 'relative', overflow: 'hidden', gap: 16, padding: 20, borderRadius: radius.xl, backgroundColor: palette.brandSurface, ...shadow },
+  assistantPromo: { minHeight: 92, flexDirection: rowDirection, alignItems: 'center', gap: 14, padding: 18, borderWidth: 1, borderColor: palette.secondaryBorder, borderRadius: radius.xl, backgroundColor: palette.surface, ...shadow },
+  assistantPromoIcon: { width: 50, height: 50, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.primaryAction },
+  assistantPromoTitle: { color: palette.ink, fontSize: 17, lineHeight: 25, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
+  assistantPromoText: { color: palette.muted, fontSize: 12, lineHeight: 20, textAlign: 'right', writingDirection: 'rtl', marginTop: 3 },
   teaserTop: { flexDirection: rowDirection, alignItems: 'center', gap: 13 },
   teaserIcon: { width: 51, height: 51, borderRadius: 17, backgroundColor: palette.primaryAction, alignItems: 'center', justifyContent: 'center' },
   teaserEyebrow: { color: palette.saffron, fontSize: 11, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
@@ -1125,7 +1485,7 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   score: { color: palette.primary, fontSize: 46, fontFamily: type.latinBold },
   empty: { minHeight: 280, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 25, borderWidth: 1, borderColor: palette.line, borderRadius: radius.xl, backgroundColor: palette.surface, ...shadow },
   searchBox: { minHeight: 57, flexDirection: rowDirection, alignItems: 'center', gap: 10, paddingHorizontal: 15, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.surface, ...shadow },
-  searchInput: { flex: 1, minHeight: 53, color: palette.ink, fontSize: 16, writingDirection: 'rtl' },
+  searchInput: { flex: 1, minHeight: 53, color: palette.ink, fontSize: 16, writingDirection: isRtl ? 'rtl' : 'ltr' },
   glossary: { flexDirection: rowDirection, flexWrap: 'wrap', gap: 10 },
   glossaryCard: { flexGrow: 1, flexBasis: 175, minWidth: 150, padding: 14, alignItems: logicalEnd, borderWidth: 1, borderColor: palette.line, borderRadius: radius.md, backgroundColor: palette.surface },
   searchResult: { minHeight: 80, flexDirection: rowDirection, alignItems: 'center', gap: 12, padding: 14, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.surface },
@@ -1135,12 +1495,14 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   profileHandle: { color: palette.onPrimaryMuted, fontSize: 12, fontFamily: type.latinSemibold, marginTop: 3 },
   profileMeta: { color: palette.onPrimaryMuted, fontSize: 11, writingDirection: 'rtl', marginTop: 4 },
   settings: { gap: 13, padding: 19, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.surface, ...shadow },
+  supportEntry: { flexDirection: rowDirection, alignItems: 'center', gap: 12, minHeight: 70, padding: 13, borderWidth: 1, borderColor: palette.secondaryBorder, borderRadius: radius.md, backgroundColor: palette.primarySoft },
   nameRow: { flexDirection: rowDirection, gap: 8 },
-  nameInput: { flex: 1, minHeight: 49, paddingHorizontal: 13, color: palette.ink, fontSize: 15, writingDirection: 'rtl', borderWidth: 1, borderColor: palette.line, borderRadius: radius.md, backgroundColor: palette.background },
+  nameInput: { flex: 1, minHeight: 49, paddingHorizontal: 13, color: palette.ink, fontSize: 15, writingDirection: isRtl ? 'rtl' : 'ltr', borderWidth: 1, borderColor: palette.line, borderRadius: radius.md, backgroundColor: palette.background },
   save: { minWidth: 80, minHeight: 49, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, backgroundColor: palette.primarySoft },
   saveText: { color: palette.primary, fontSize: 13, fontWeight: '900', writingDirection: 'rtl' },
   accountIdentity: { minHeight: 76, flexDirection: rowDirection, alignItems: 'center', gap: 11, padding: 13, borderRadius: radius.md, backgroundColor: palette.background, borderWidth: 1, borderColor: palette.line },
   accountUsername: { color: palette.primary, fontSize: 14, fontFamily: type.latinSemibold, marginTop: 2 },
+  accountEmail: { color: palette.muted, fontSize: 11, fontFamily: type.latinMedium, marginTop: 3, writingDirection: 'ltr' },
   settingRow: { minHeight: 68, flexDirection: rowDirection, alignItems: 'center', gap: 11, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 12 },
   preferenceHeading: { alignItems: logicalEnd, gap: 3, marginTop: 2 },
   themePicker: { flexDirection: rowDirection, gap: 8, padding: 6, borderRadius: radius.lg, backgroundColor: palette.background, borderWidth: 1, borderColor: palette.line },
@@ -1166,6 +1528,37 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   dangerText: { color: palette.rose, fontSize: 13, fontWeight: '900', writingDirection: 'rtl' },
   signOut: { minHeight: 53, flexDirection: rowDirection, alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: palette.secondaryBorder, borderRadius: radius.md, backgroundColor: palette.primarySoft },
   signOutText: { color: palette.primary, fontSize: 13, fontWeight: '900', writingDirection: 'rtl' },
+  chatPage: { flex: 1, width: '100%', maxWidth: 900, alignSelf: 'center', padding: 20, gap: 14 },
+  chatHeading: { flexDirection: rowDirection, alignItems: 'center', gap: 13 },
+  chatHeadingIcon: { width: 52, height: 52, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.primaryAction },
+  assistantMode: { flexDirection: rowDirection, alignItems: 'center', alignSelf: logicalEnd, gap: 7, minHeight: 30, paddingHorizontal: 11, borderRadius: radius.round, backgroundColor: palette.tealSoft },
+  assistantModeText: { color: palette.tealInk, fontSize: 10, lineHeight: 16, fontWeight: '900', writingDirection: 'rtl' },
+  assistantPrivacy: { flexDirection: rowDirection, alignItems: 'flex-start', gap: 9, padding: 13, borderWidth: 1, borderColor: palette.borderGold, borderRadius: radius.md, backgroundColor: palette.saffronSoft },
+  assistantPrivacyText: { flex: 1, color: palette.goldBody, fontSize: 11, lineHeight: 19, textAlign: 'right', writingDirection: 'rtl' },
+  chatMessages: { flex: 1, minHeight: 260, borderWidth: 1, borderColor: palette.line, borderRadius: radius.xl, backgroundColor: palette.surface },
+  chatMessagesContent: { flexGrow: 1, gap: 11, padding: 16 },
+  chatEmpty: { flex: 1, minHeight: 245, alignItems: 'center', justifyContent: 'center', gap: 13, padding: 10 },
+  suggestionList: { width: '100%', gap: 8 },
+  suggestion: { minHeight: 50, flexDirection: rowDirection, alignItems: 'center', gap: 9, paddingHorizontal: 13, borderWidth: 1, borderColor: palette.line, borderRadius: radius.md, backgroundColor: palette.background },
+  suggestionText: { flex: 1, color: palette.inkSoft, fontSize: 12, lineHeight: 19, fontWeight: '800', textAlign: 'right', writingDirection: 'rtl' },
+  chatBubble: { maxWidth: '84%', gap: 6, paddingHorizontal: 14, paddingVertical: 11, borderRadius: radius.lg },
+  chatBubbleUser: { alignSelf: isRtl ? 'flex-start' : 'flex-end', backgroundColor: palette.primaryAction },
+  chatBubbleAssistant: { alignSelf: isRtl ? 'flex-end' : 'flex-start', borderWidth: 1, borderColor: palette.line, backgroundColor: palette.background },
+  chatBubbleText: { color: palette.inkSoft, fontSize: 14, lineHeight: 23, textAlign: 'right', writingDirection: 'rtl' },
+  chatBubbleTextUser: { color: palette.white },
+  chatSource: { color: palette.primary, fontSize: 9, lineHeight: 15, fontWeight: '800', textAlign: 'right', writingDirection: 'rtl' },
+  chatTyping: { alignSelf: isRtl ? 'flex-end' : 'flex-start', paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.md, backgroundColor: palette.surfaceMuted },
+  chatComposer: { flexDirection: rowDirection, alignItems: 'flex-end', gap: 9 },
+  chatInput: { flex: 1, minHeight: 52, maxHeight: 126, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.surface, color: palette.ink, fontSize: 14, lineHeight: 21, textAlign: isRtl ? 'right' : 'left', writingDirection: isRtl ? 'rtl' : 'ltr' },
+  chatSend: { width: 52, height: 52, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.primaryAction },
+  chatClear: { minHeight: 40, alignSelf: 'center', flexDirection: rowDirection, alignItems: 'center', gap: 7, paddingHorizontal: 12 },
+  supportGroup: { gap: 2, paddingHorizontal: 16, borderWidth: 1, borderColor: palette.line, borderRadius: radius.xl, backgroundColor: palette.surface, ...shadow },
+  supportRow: { minHeight: 72, flexDirection: rowDirection, alignItems: 'center', gap: 12, borderBottomWidth: 1, borderBottomColor: palette.line },
+  dangerSupport: { minHeight: 72, flexDirection: rowDirection, alignItems: 'center', gap: 12, paddingHorizontal: 16, borderWidth: 1, borderColor: palette.borderRose, borderRadius: radius.xl, backgroundColor: palette.roseSoft },
+  supportVersion: { color: palette.muted, fontSize: 11, lineHeight: 18, textAlign: 'center' },
+  legalHero: { flexDirection: rowDirection, alignItems: 'center', gap: 14, padding: 20, borderRadius: radius.xl, backgroundColor: palette.primarySoft },
+  legalDocument: { gap: 20, padding: 22, borderWidth: 1, borderColor: palette.line, borderRadius: radius.xl, backgroundColor: palette.surface, ...shadow },
+  legalSection: { gap: 7 },
   notice: { flexDirection: rowDirection, alignItems: 'flex-start', gap: 8, padding: 13, borderRadius: radius.md, backgroundColor: palette.surfaceMuted },
   noticeText: { flex: 1, color: palette.muted, fontSize: 10, lineHeight: 18, textAlign: 'right', writingDirection: 'rtl' },
   specBanner: { flexDirection: rowDirection, alignItems: 'center', gap: 14, padding: 18, borderRadius: radius.lg, backgroundColor: palette.brandSurface },
@@ -1190,7 +1583,7 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   insightsPage: { width: '100%', maxWidth: 1080 },
   insightsMotion: { width: '100%', gap: 25 },
   insightsHero: { position: 'relative', overflow: 'hidden', minHeight: 265, flexDirection: rowDirection, flexWrap: 'wrap', alignItems: 'center', gap: 25, padding: 27, borderRadius: radius.xl, backgroundColor: palette.brandSurface, ...shadow },
-  insightsGlow: { position: 'absolute', width: 330, height: 330, borderRadius: 165, left: -145, bottom: -185, backgroundColor: palette.primaryAction, opacity: 0.42 },
+  insightsGlow: { position: 'absolute', width: 330, height: 330, borderRadius: 165, left: -145, bottom: -185, backgroundColor: palette.primaryAction, opacity: 0.42, pointerEvents: 'none' },
   readinessScore: { width: 158, minHeight: 158, borderRadius: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.overlaySurface, borderWidth: 1, borderColor: palette.overlayBorder },
   readinessNumber: { color: palette.white, fontSize: 43, fontFamily: type.latinBold },
   readinessCaption: { color: palette.onPrimaryMuted, fontSize: 11, fontWeight: '800', writingDirection: 'rtl', marginTop: 5 },
@@ -1272,7 +1665,7 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   translationInlineText: { flex: 1, color: palette.primaryDark, fontSize: 11, lineHeight: 19 },
   cardPressed: { opacity: 0.9, borderColor: palette.pressBorder, transform: [{ scale: 0.992 }] },
   gameStatus: { position: 'relative', overflow: 'hidden', gap: 14, padding: 20, borderRadius: radius.xl, backgroundColor: palette.brandSurface, ...shadow },
-  gameStatusGlow: { position: 'absolute', width: 230, height: 230, borderRadius: 115, left: -90, bottom: -150, backgroundColor: palette.primaryAction, opacity: 0.45 },
+  gameStatusGlow: { position: 'absolute', width: 230, height: 230, borderRadius: 115, left: -90, bottom: -150, backgroundColor: palette.primaryAction, opacity: 0.45, pointerEvents: 'none' },
   gameStatusTop: { flexDirection: rowDirection, alignItems: 'center', gap: 13 },
   levelMedallion: { width: 54, height: 54, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.saffronSoft, borderWidth: 1, borderColor: palette.borderGold },
   gameEyebrow: { color: palette.saffron, fontSize: 11, lineHeight: 18, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
@@ -1287,7 +1680,7 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   gamePage: { width: '100%', maxWidth: 980, alignSelf: 'center', padding: 20, paddingBottom: 70, gap: 20 },
   gameScreenMotion: { width: '100%', gap: 24 },
   gameHero: { position: 'relative', overflow: 'hidden', minHeight: 220, flexDirection: rowDirection, flexWrap: 'wrap', alignItems: 'center', gap: 22, padding: 25, borderRadius: radius.xl, backgroundColor: palette.brandSurface, ...shadow },
-  gameHeroGlow: { position: 'absolute', width: 310, height: 310, borderRadius: 155, left: -120, bottom: -190, backgroundColor: palette.primaryAction, opacity: 0.5 },
+  gameHeroGlow: { position: 'absolute', width: 310, height: 310, borderRadius: 155, left: -120, bottom: -190, backgroundColor: palette.primaryAction, opacity: 0.5, pointerEvents: 'none' },
   gameHeroMedallion: { width: 92, height: 92, borderRadius: 31, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.saffronSoft, borderWidth: 2, borderColor: palette.borderGold },
   gameHeroCopy: { flex: 1, minWidth: 230, alignItems: logicalEnd, gap: 5 },
   gameHeroEyebrow: { color: palette.saffron, fontSize: 12, lineHeight: 20, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
@@ -1327,7 +1720,7 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   quizHeader: { width: '100%', flexDirection: rowDirection, alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   comboPill: { minHeight: 36, flexDirection: rowDirection, alignItems: 'center', gap: 6, paddingHorizontal: 12, borderRadius: radius.round, backgroundColor: palette.saffronSoft, borderWidth: 1, borderColor: palette.borderGold },
   comboText: { color: palette.goldInk, fontSize: 12, lineHeight: 18, fontWeight: '900', writingDirection: 'rtl' },
-  celebrationStage: { position: 'relative', width: 150, height: 104, alignItems: 'center', justifyContent: 'center' },
+  celebrationStage: { position: 'relative', width: 150, height: 104, alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' },
   celebrationSpark: { position: 'absolute', width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
   sparkOne: { top: 5, left: 13 },
   sparkTwo: { top: 1, right: 15 },

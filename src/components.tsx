@@ -1,12 +1,13 @@
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { useEffect, useMemo, useRef, type PropsWithChildren } from 'react';
 import { Animated, Easing, Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import type { IconName, Pathway } from './data';
+import { resolveDirectionalArrow, type NavigationDirection } from './direction';
 import { LocalizedText as Text, useI18n } from './i18n';
 import { motion, useReducedMotion } from './motion';
 import { SoundPressable as Pressable } from './sound';
-import { createShadow, radius, themedAccentColor, themedSoftColor, type, useAppTheme, type AppPalette } from './theme';
+import { createAccentGlow, createShadow, radius, themedAccentColor, themedSoftColor, type, useAppTheme, type AppPalette } from './theme';
 
 const useComponentTheme = () => {
   const theme = useAppTheme();
@@ -66,7 +67,8 @@ export function ProgressBar({ value, color, trackColor }: { value: number; color
 export function ActionButton({
   label,
   onPress,
-  icon = 'arrow-left',
+  icon,
+  direction = 'forward',
   variant = 'primary',
   fullWidth = false,
   disabled = false,
@@ -75,6 +77,7 @@ export function ActionButton({
   label: string;
   onPress: () => void;
   icon?: IconName;
+  direction?: NavigationDirection | null;
   variant?: 'primary' | 'secondary' | 'quiet';
   fullWidth?: boolean;
   disabled?: boolean;
@@ -83,7 +86,7 @@ export function ActionButton({
   const { palette, styles } = useComponentTheme();
   const { isRtl } = useI18n();
   const foreground = variant === 'primary' ? palette.onPrimaryAction : variant === 'secondary' ? palette.primary : palette.inkSoft;
-  const directionalIcon = !isRtl && icon === 'arrow-left' ? 'arrow-right' : !isRtl && icon === 'arrow-right' ? 'arrow-left' : icon;
+  const resolvedIcon: IconName = icon ?? resolveDirectionalArrow(direction ?? 'forward', isRtl);
   return (
     <Pressable
       accessibilityRole="button"
@@ -94,6 +97,7 @@ export function ActionButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
+        variant === 'primary' && styles.buttonGlow,
         variant === 'secondary' && styles.buttonSecondary,
         variant === 'quiet' && styles.buttonQuiet,
         fullWidth && styles.fullWidth,
@@ -102,7 +106,7 @@ export function ActionButton({
       ]}
     >
       <Text style={[styles.buttonLabel, { color: foreground }]}>{label}</Text>
-      <Feather name={directionalIcon} size={18} color={foreground} />
+      <Feather name={resolvedIcon} size={18} color={foreground} />
     </Pressable>
   );
 }
@@ -215,6 +219,7 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
     progressTrack: { width: '100%', height: 7, borderRadius: radius.round, overflow: 'hidden' },
     progressValue: { height: '100%', borderRadius: radius.round },
     button: { minHeight: 52, paddingHorizontal: 22, borderRadius: radius.md, backgroundColor: palette.primaryAction, flexDirection: rowDirection, alignItems: 'center', justifyContent: 'center', gap: 10, alignSelf: 'flex-start' },
+    buttonGlow: { ...createAccentGlow(palette) },
     buttonSecondary: { backgroundColor: palette.primarySoft, borderWidth: 1, borderColor: palette.secondaryBorder },
     buttonQuiet: { backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.line },
     buttonLabel: { fontSize: 14, lineHeight: 21, fontWeight: '700', writingDirection: 'rtl' },

@@ -19,7 +19,7 @@ The codebase is configured for Expo SDK 54, EAS Build and EAS Submit. It can pro
 ## Local release checks
 
 ```powershell
-nvm use 20.19.4
+nvm use 24.18.0
 npm ci
 npm run release:check
 npm run export:web

@@ -21,6 +21,8 @@ const tests = [];
 const test = (name, run) => tests.push({ name, run });
 
 const auth = require('../src/auth.ts');
+const { daysUntilDate, isValidCalendarDate } = require('../src/date.ts');
+const { resolveDirectionalArrow, resolveForwardChevron } = require('../src/direction.ts');
 const gamification = require('../src/gamification.ts');
 const { buildLearningAnalytics } = require('../src/analytics.ts');
 const {
@@ -92,6 +94,14 @@ test('username and PIN validation accepts valid multilingual input and rejects u
   assert.equal(auth.validatePin('123456'), '');
   assert.equal(auth.validatePin('123'), 'pinFormat');
   assert.equal(auth.validatePin('12a4'), 'pinFormat');
+});
+
+test('exam countdown uses calendar days and remains stable across daylight-saving changes', () => {
+  assert.equal(isValidCalendarDate('2026-02-29'), false);
+  assert.equal(isValidCalendarDate('2028-02-29'), true);
+  assert.equal(daysUntilDate('2026-12-15', new Date(2026, 7, 24, 23, 30)), 113);
+  assert.equal(daysUntilDate('2026-03-30', new Date(2026, 2, 28, 12)), 2);
+  assert.equal(daysUntilDate('invalid', new Date(2026, 7, 24)), null);
 });
 
 test('curriculum IDs, pathway references, questions, and answer keys are internally valid', () => {
@@ -307,11 +317,56 @@ test('cloud schema and client retain required security boundaries', () => {
 });
 
 test('local sign-out locks the account without erasing credentials or progress', () => {
-  const source = fs.readFileSync('src/store.tsx', 'utf8');
+  const source = fs.readFileSync('src/store.tsx', 'utf8').replace(/\r\n/g, '\n');
   const localBranch = source.match(/if \(!supabase\) \{[\s\S]*?\n    \}\n    if \(supabase\)/)?.[0] ?? '';
   assert.match(localBranch, /const signedOut = \{ \.\.\.stateRef\.current, authenticated: false \}/);
   assert.match(localBranch, /stateRef\.current = signedOut;[\s\S]*setState\(signedOut\);[\s\S]*return;/);
   assert.doesNotMatch(localBranch, /\.\.\.initialState/);
+});
+
+test('guest access and first-run tutorial preserve learner progress', () => {
+  const store = fs.readFileSync('src/store.tsx', 'utf8').replace(/\r\n/g, '\n');
+  const onboarding = fs.readFileSync('src/onboarding.tsx', 'utf8').replace(/\r\n/g, '\n');
+  const navigation = fs.readFileSync('src/navigation.tsx', 'utf8').replace(/\r\n/g, '\n');
+  const guestExit = store.match(/if \(stateRef\.current\.accountMode === 'guest'\) \{[\s\S]*?\n      return;\n    \}/)?.[0] ?? '';
+
+  assert.match(store, /accountMode: 'local' \| 'cloud' \| 'guest'/);
+  assert.match(store, /const startGuest = useCallback\(\(\) => \{[\s\S]*authenticated: true,[\s\S]*accountMode: 'guest'/);
+  assert.match(store, /const completeTutorial = useCallback\(\(\) => \{[\s\S]*tutorialComplete: true/);
+  assert.match(store, /const restartTutorial = useCallback\(\(\) => \{[\s\S]*tutorialComplete: false/);
+  assert.match(guestExit, /\.\.\.current/);
+  assert.doesNotMatch(guestExit, /\.\.\.initialState/);
+  assert.match(onboarding, /export function WelcomeGateway/);
+  assert.match(onboarding, /export function Tutorial/);
+  assert.match(navigation, /!state\.tutorialComplete/);
+});
+
+test('multilingual navigation uses semantic forward and back directions', () => {
+  const components = fs.readFileSync('src/components.tsx', 'utf8').replace(/\r\n/g, '\n');
+  const onboarding = fs.readFileSync('src/onboarding.tsx', 'utf8').replace(/\r\n/g, '\n');
+  const navigation = fs.readFileSync('src/navigation.tsx', 'utf8').replace(/\r\n/g, '\n');
+  const i18n = fs.readFileSync('src/i18n.tsx', 'utf8').replace(/\r\n/g, '\n');
+
+  assert.match(components, /direction\?: NavigationDirection \| null/);
+  assert.match(components, /resolveDirectionalArrow\(direction \?\? 'forward', isRtl\)/);
+  assert.doesNotMatch(`${onboarding}\n${navigation}`, /<ActionButton[^>]*icon="arrow-(?:left|right)"/);
+  assert.match(onboarding, /direction="back"/);
+  assert.match(onboarding, /direction="forward"/);
+  assert.match(onboarding, /resolveForwardChevron\(isRtl\)/);
+  assert.match(i18n, /code: 'fa'[\s\S]*?rtl: true/);
+  assert.match(i18n, /code: 'ar'[\s\S]*?rtl: true/);
+  for (const code of ['en', 'zh', 'es']) assert.match(i18n, new RegExp(`code: '${code}'[^\\n]*rtl: false`));
+
+  for (const code of ['en', 'zh', 'es']) {
+    assert.equal(resolveDirectionalArrow('forward', false), 'arrow-right', `${code} forward`);
+    assert.equal(resolveDirectionalArrow('back', false), 'arrow-left', `${code} back`);
+    assert.equal(resolveForwardChevron(false), 'chevron-right', `${code} chevron`);
+  }
+  for (const code of ['fa', 'ar']) {
+    assert.equal(resolveDirectionalArrow('forward', true), 'arrow-left', `${code} forward`);
+    assert.equal(resolveDirectionalArrow('back', true), 'arrow-right', `${code} back`);
+    assert.equal(resolveForwardChevron(true), 'chevron-left', `${code} chevron`);
+  }
 });
 
 const waitForServer = (child) => new Promise((resolve, reject) => {

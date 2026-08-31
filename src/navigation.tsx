@@ -1,7 +1,7 @@
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import * as Haptics from 'expo-haptics';
-import { DefaultTheme, NavigationContainer, useNavigation } from '@react-navigation/native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { DefaultTheme, NavigationContainer, useNavigation, type CompositeNavigationProp } from '@react-navigation/native';
+import { BottomTabBar, createBottomTabNavigator, type BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator, type NativeStackNavigationProp, type NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
@@ -25,17 +25,19 @@ import { askStudyAssistant, assistantSuggestions, onlineAssistantConfigured, pri
 import { normalizeUsername, validatePin, validateUsername } from './auth';
 import { ActionButton, Brand, ProgressBar } from './components';
 import { glossary, lessonById, lessons, pathwayById, pathways, type IconName, type Lesson, type Pathway, type QuizQuestion } from './curriculum';
+import { daysUntilDate, isValidCalendarDate } from './date';
 import { buildGameProfile, gameLevels, lessonXp, localDateKey, testXp, type Achievement, type DailyMission } from './gamification';
 import { languageOptions, LocalizedText as Text, useI18n, type AppLanguage } from './i18n';
 import { localizeLesson, localizeQuestion } from './legal-content';
 import { MotionView, motion } from './motion';
+import { Tutorial, WelcomeGateway } from './onboarding';
 import { legalDocuments, product, type LegalDocumentId } from './product';
 import { buildBalancedTestQuestions, sqeTotals, stageSubjects, type SqeStage, type SqeTrack } from './sqe';
 import { sraSpecification } from './sqe-spec';
 import { SoundPressable as Pressable, useSoundFeedback } from './sound';
 import { useLearner, type SubjectScore, type TestMode, type ThemeMode } from './store';
 import { subjectArtFor } from './subject-art';
-import { createShadow, lightPalette, radius, space, themedAccentColor, themedSoftColor, type, useAppTheme, type AppPalette } from './theme';
+import { createAccentGlow, createShadow, lightPalette, radius, space, themedAccentColor, themedSoftColor, type, useAppTheme, type AppPalette } from './theme';
 
 export type RootStackParamList = {
   Main: undefined;
@@ -73,13 +75,19 @@ let s: ReturnType<typeof createStyles>;
 
 export function HaghDanApp() {
   const { state, cloud } = useLearner();
+  const [accountFlowOpen, setAccountFlowOpen] = useState(false);
   const theme = useAppTheme();
   const { isRtl } = useI18n();
   palette = theme.palette;
   darkMode = theme.isDark;
   s = useMemo(() => createStyles(theme.palette, isRtl), [theme.palette, isRtl]);
+  useEffect(() => {
+    if (state.authenticated) setAccountFlowOpen(false);
+  }, [state.authenticated]);
   if (!state.hydrated || (cloud.configured && cloud.checking && !cloud.recoveryMode)) return <Loading />;
-  if (!state.authenticated || cloud.recoveryMode) return <Authentication />;
+  if (cloud.recoveryMode) return <Authentication />;
+  if (!state.authenticated) return accountFlowOpen ? <Authentication onBack={() => setAccountFlowOpen(false)} /> : <WelcomeGateway onAccount={() => setAccountFlowOpen(true)} />;
+  if (!state.tutorialComplete) return <Tutorial />;
   return (
     <NavigationContainer theme={{ ...DefaultTheme, dark: darkMode, colors: { ...DefaultTheme.colors, primary: palette.primary, background: palette.background, card: palette.surface, text: palette.ink, border: palette.line } }}>
       <Root.Navigator screenOptions={{ headerShown: false, animation: isRtl ? 'slide_from_left' : 'slide_from_right', contentStyle: { backgroundColor: palette.background } }}>
@@ -108,7 +116,7 @@ function MainTabs() {
   const { t } = useI18n();
   const desktop = width >= 980;
   return (
-    <Tabs.Navigator screenListeners={{ tabPress: playTap }} screenOptions={({ route }) => ({
+    <Tabs.Navigator tabBar={(props) => desktop ? <View style={s.tabsDesktopHost}><DesktopNavigationBackdrop /><BottomTabBar {...props} /><DesktopLibraryShortcut onOpenLibrary={() => props.navigation.navigate('Learn')} /></View> : <BottomTabBar {...props} />} screenListeners={{ tabPress: playTap }} screenOptions={({ route }) => ({
       headerShown: false,
       tabBarPosition: desktop ? 'left' : 'bottom',
       tabBarActiveTintColor: palette.primary,
@@ -118,7 +126,6 @@ function MainTabs() {
       animation: 'fade',
       tabBarLabel: ({ focused }) => <Text numberOfLines={1} style={[s.navLabel, desktop && s.navLabelDesktop, focused && s.navLabelActive]}>{t(tabInfo[route.name].key)}</Text>,
       tabBarIcon: ({ focused }) => <NavigationIcon route={route.name} focused={focused} />,
-      tabBarBackground: () => desktop ? <DesktopNavigationBackdrop /> : undefined,
       tabBarStyle: desktop ? s.tabsDesktop : s.tabsMobile,
       tabBarItemStyle: [s.tabItem, desktop && s.tabItemDesktop],
     })}>
@@ -142,29 +149,32 @@ function NavigationIcon({ route, focused }: { route: keyof TabParams; focused: b
 }
 
 function DesktopNavigationBackdrop() {
+  return <View accessible={false} style={s.sidebarBackdrop}><View style={s.sidebarGlow} /></View>;
+}
+
+function DesktopLibraryShortcut({ onOpenLibrary }: { onOpenLibrary: () => void }) {
   const { state } = useLearner();
   const { t, formatNumber } = useI18n();
   const progress = Math.round((state.completedLessons.length / Math.max(1, lessons.length)) * 100);
   return (
-    <View accessible={false} style={s.sidebarBackdrop}>
-      <View style={s.sidebarGlow} />
+    <Pressable accessibilityRole="button" accessibilityLabel={`${t('home.library')}. ${t('nav.learn')}`} onPress={onOpenLibrary} style={({ pressed }) => [s.sidebarArtworkButton, pressed && s.sidebarArtworkPressed]}>
       <ImageBackground source={subjectArtFor('flk1-system')} resizeMode="cover" style={s.sidebarArtwork} imageStyle={s.sidebarArtworkImage} accessible={false} accessibilityIgnoresInvertColors>
         <View style={s.sidebarArtworkScrim} />
         <View style={s.sidebarArtworkContent}>
-          <View style={s.sidebarArtworkIcon}><Feather name="compass" size={21} color={palette.saffron} /></View>
+          <View style={s.sidebarArtworkTop}><View style={s.sidebarArtworkIcon}><Feather name="compass" size={21} color={palette.saffron} /></View><DirectionalChevron size={18} color={palette.white} /></View>
           <Text style={s.sidebarArtworkTitle}>{t('home.library')}</Text>
           <Text style={s.sidebarArtworkMeta}>{t('home.libraryProgress', { done: formatNumber(state.completedLessons.length), total: formatNumber(lessons.length) })}</Text>
           <View style={s.sidebarProgress}><ProgressBar value={progress} color={palette.saffron} trackColor={palette.overlayBorder} /></View>
         </View>
       </ImageBackground>
-    </View>
+    </Pressable>
   );
 }
 
 type AuthErrors = Partial<Record<'name' | 'username' | 'email' | 'pin' | 'confirmPin' | 'terms' | 'form', string>>;
 type CloudAuthMode = 'login' | 'signup' | 'forgot' | 'verify' | 'recovery';
 
-function Authentication() {
+function Authentication({ onBack }: { onBack?: () => void }) {
   const {
     state,
     cloud,
@@ -331,7 +341,10 @@ function Authentication() {
       <KeyboardAvoidingView style={s.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={s.onboardScroll} keyboardShouldPersistTaps="handled">
           <MotionView style={s.onboardCard} distance={18} duration={motion.relaxed}>
-            <Brand />
+            <View style={s.authTopRow}>
+              <Brand />
+              {onBack && mode !== 'recovery' ? <Pressable accessibilityRole="button" accessibilityLabel={t('common.back')} onPress={onBack} style={({ pressed }) => [s.authBack, pressed && s.pressed]}><Feather name={isRtl ? 'arrow-right' : 'arrow-left'} size={19} color={palette.ink} /><Text style={s.authBackText}>{t('common.back')}</Text></Pressable> : null}
+            </View>
             <View style={s.authLanguage}>
               <View style={s.preferenceHeading}><Text style={s.label}>{t('language.title')}</Text><Text style={s.hint}>{t('language.helper')}</Text></View>
               <LanguagePicker value={state.language} onChange={(language) => updateSettings({ language })} compact />
@@ -391,7 +404,8 @@ function Authentication() {
             {notice ? <View style={s.authNotice}><Feather name="check-circle" size={17} color={palette.teal} /><Text style={s.authSecurityText}>{notice}</Text></View> : null}
             <ActionButton
               label={mode === 'forgot' ? t('auth.sendReset') : mode === 'verify' ? t('auth.resend') : isRecovery ? t('auth.updatePassword') : isSignup ? t('auth.createAction') : t('auth.login')}
-              icon={mode === 'forgot' || mode === 'verify' ? 'mail' : 'arrow-left'}
+              icon={mode === 'forgot' || mode === 'verify' ? 'mail' : undefined}
+              direction="forward"
               onPress={() => void submit()}
               fullWidth
               disabled={busy}
@@ -447,7 +461,7 @@ function Home() {
   const due = state.reviewQueue.filter((item) => new Date(item.dueAt) <= new Date()).length;
   return (
     <Page>
-      <Header eyebrow={t('home.eyebrow')} title={t('home.greeting', { name: state.name })} subtitle={t('home.subtitle')} />
+      <Header eyebrow={t('home.eyebrow')} title={t('home.greeting', { name: state.accountMode === 'guest' ? t('profile.guestName') : state.name })} subtitle={t('home.subtitle')} />
       <View style={s.hero}>
         <View style={s.heroGlow} />
         <View style={s.heroGlowSmall} />
@@ -457,7 +471,7 @@ function Home() {
           {secondaryLegalTitle(next.title, next.englishTitle) ? <Text style={s.english}>{secondaryLegalTitle(next.title, next.englishTitle)}</Text> : null}
           <Text style={s.body}>{language === 'fa' ? next.summary : t('learn.pathwayDescription')}</Text>
           <View style={s.metaRow}><Meta icon="clock" text={t('home.minutes', { count: formatNumber(next.duration) })} /><Meta icon="layers" text={t('home.sections', { count: formatNumber(next.sections.length) })} /></View>
-          <ActionButton label={t('home.startLesson')} icon="arrow-left" onPress={() => nav.navigate('Lesson', { lessonId: next.id })} />
+          <ActionButton label={t('home.startLesson')} direction="forward" onPress={() => nav.navigate('Lesson', { lessonId: next.id })} />
         </View>
         <View style={s.goalCard}><View style={s.goalIcon}><Feather name="book-open" size={28} color={palette.white} /></View><Text style={s.goalBig}>{formatNumber(completedToday)}/{formatNumber(state.dailyGoal)}</Text><Text style={s.goalCaption}>{t('home.dailyGoal')}</Text><View style={s.goalProgress}><ProgressBar value={(completedToday / state.dailyGoal) * 100} color={palette.white} trackColor={palette.overlayBorder} /></View></View>
       </View>
@@ -576,6 +590,8 @@ function Learn() {
   const { t, formatNumber, isRtl, language } = useI18n();
   const [track, setTrack] = useState<SqeTrack>('FLK1');
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(0);
+  const pageSize = 6;
   const tracks: { key: SqeTrack; label: string }[] = [
     { key: 'FLK1', label: 'FLK1' }, { key: 'FLK2', label: 'FLK2' },
     { key: 'SQE2', label: 'SQE2' }, { key: 'EVERYDAY', label: t('learn.everyday') },
@@ -583,6 +599,8 @@ function Learn() {
   const source = track === 'EVERYDAY' ? pathways.filter((item) => !item.track) : stageSubjects(track);
   const key = query.trim().toLocaleLowerCase();
   const visible = key ? source.filter((item) => [item.title, item.englishTitle, item.description].some((value) => value.toLocaleLowerCase().includes(key))) : source;
+  const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
+  const visiblePage = visible.slice(page * pageSize, (page + 1) * pageSize);
   const unitCount = source.reduce((sum, item) => sum + item.lessonIds.length, 0);
   return (
     <Page>
@@ -591,11 +609,16 @@ function Learn() {
         <View style={s.specIcon}><Feather name="award" size={24} color={palette.white} /></View>
         <View style={s.flexEnd}><Text style={s.specTitle}>{t('learn.specTitle')}</Text><Text style={s.specText}>{t('learn.specText', { sqe1: formatNumber(sqeTotals.flk1Subjects + sqeTotals.flk2Subjects), sqe2: formatNumber(sqeTotals.sqe2Skills), stations: formatNumber(sqeTotals.sqe2Stations), questions: formatNumber(sqeTotals.practiceQuestions) })}</Text></View>
       </View>
-      <View style={s.trackTabs}>{tracks.map((item) => <Pressable key={item.key} accessibilityRole="tab" accessibilityState={{ selected: track === item.key }} onPress={() => { setTrack(item.key); setQuery(''); }} style={({ pressed }) => [s.trackTab, track === item.key && s.trackTabActive, pressed && s.pressed]}><Text style={[s.trackTabText, track === item.key && s.trackTabTextActive]}>{item.label}</Text></Pressable>)}</View>
-      <View style={s.searchBox}><Feather name="search" size={20} color={palette.muted} /><TextInput value={query} onChangeText={setQuery} placeholder={t('learn.search')} placeholderTextColor={palette.muted} style={s.searchInput} textAlign={isRtl ? 'right' : 'left'} accessibilityLabel={t('learn.search')} /></View>
+      <View style={s.trackTabs}>{tracks.map((item) => <Pressable key={item.key} accessibilityRole="tab" accessibilityState={{ selected: track === item.key }} onPress={() => { setTrack(item.key); setQuery(''); setPage(0); }} style={({ pressed }) => [s.trackTab, track === item.key && s.trackTabActive, pressed && s.pressed]}><Text style={[s.trackTabText, track === item.key && s.trackTabTextActive]}>{item.label}</Text></Pressable>)}</View>
+      <View style={s.searchBox}><Feather name="search" size={20} color={palette.muted} /><TextInput value={query} onChangeText={(value) => { setQuery(value); setPage(0); }} placeholder={t('learn.search')} placeholderTextColor={palette.muted} style={s.searchInput} textAlign={isRtl ? 'right' : 'left'} accessibilityLabel={t('learn.search')} /></View>
       <View style={s.library}><View style={s.iconHero}><Feather name={track === 'SQE2' ? 'target' : 'book-open'} size={25} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>{t('learn.units', { sections: formatNumber(source.length), units: formatNumber(unitCount) })}</Text><Text style={s.hint}>{t('learn.available', { done: formatNumber(state.completedLessons.filter((id) => source.some((path) => path.lessonIds.includes(id))).length) })}</Text></View></View>
       {language !== 'fa' ? <View style={s.translationNotice}><Feather name="globe" size={20} color={palette.primary} /><Text style={s.translationNoticeText}>{t('learn.translationNote', { language: languageOptions.find((item) => item.code === language)?.nativeName ?? language })}</Text></View> : null}
-      <View style={s.grid}>{visible.map((item) => <PathCard key={item.id} item={item} onPress={() => nav.navigate('Pathway', { pathwayId: item.id })} />)}</View>
+      <View style={s.grid}>{visiblePage.map((item) => <PathCard key={item.id} item={item} wide={visiblePage.length === 1} onPress={() => nav.navigate('Pathway', { pathwayId: item.id })} />)}</View>
+      {pageCount > 1 ? <View style={s.pagination} accessibilityRole="toolbar" accessibilityLabel={`${track} ${formatNumber(page + 1)} / ${formatNumber(pageCount)}`}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('test.previous')} accessibilityState={{ disabled: page === 0 }} disabled={page === 0} onPress={() => setPage((current) => Math.max(0, current - 1))} style={({ pressed }) => [s.pageButton, page === 0 && s.disabled, pressed && page > 0 && s.pressed]}><Feather name={isRtl ? 'chevron-right' : 'chevron-left'} size={19} color={palette.primary} /><Text style={s.pageButtonText}>{t('test.previous')}</Text></Pressable>
+        <View style={s.pageStatus}><Text style={s.pageStatusText}>{formatNumber(page + 1)} / {formatNumber(pageCount)}</Text><View style={s.pageDots}>{Array.from({ length: pageCount }, (_, index) => <View key={index} style={[s.pageDot, index === page && s.pageDotActive]} />)}</View></View>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('test.next')} accessibilityState={{ disabled: page === pageCount - 1 }} disabled={page === pageCount - 1} onPress={() => setPage((current) => Math.min(pageCount - 1, current + 1))} style={({ pressed }) => [s.pageButton, page === pageCount - 1 && s.disabled, pressed && page < pageCount - 1 && s.pressed]}><Text style={s.pageButtonText}>{t('test.next')}</Text><Feather name={isRtl ? 'chevron-left' : 'chevron-right'} size={19} color={palette.primary} /></Pressable>
+      </View> : null}
       {!visible.length ? <Empty icon="search" title={t('learn.noResultsTitle')} body={t('learn.noResultsBody')} /> : null}
       <Notice />
     </Page>
@@ -708,12 +731,12 @@ function LessonScreen({ route, navigation }: LessonProps) {
       <View style={s.lessonTop}><RoundIcon icon="x" label={t('lesson.close')} onPress={navigation.goBack} /><View style={s.flex}><ProgressBar value={progress} /></View><RoundIcon icon="bookmark" label={t('lesson.save')} active={saved} onPress={() => toggleSaved(item.id)} /></View>
       <ScrollView contentContainerStyle={s.lessonPage}>
         <MotionView style={s.lessonMotion} replayKey={`${section}-${quiz}-${finished}`} distance={10}>
-        {finished ? <View style={s.result}><CelebrationBurst icon="award" tone={result >= 70 ? 'success' : 'gold'} /><Text style={s.eyebrow}>{t('lesson.complete')}</Text><Text style={s.pathHeroTitle}>{legalTitle(item.title, item.englishTitle)}</Text><Text style={s.score}>{formatNumber(result)}%</Text><View style={s.rewardRow}><RewardChip icon="zap" value={`+${formatNumber(earnedXp)} XP`} label="XP" /><RewardChip icon="activity" value={formatNumber(bestCombo)} label={t('lesson.chain', { count: formatNumber(bestCombo) })} /></View><Text style={s.centerBody}>{t('lesson.progressSaved')}</Text><ActionButton label={t('lesson.backPath')} icon="arrow-right" onPress={navigation.goBack} fullWidth /></View>
+        {finished ? <View style={s.result}><CelebrationBurst icon="award" tone={result >= 70 ? 'success' : 'gold'} /><Text style={s.eyebrow}>{t('lesson.complete')}</Text><Text style={s.pathHeroTitle}>{legalTitle(item.title, item.englishTitle)}</Text><Text style={s.score}>{formatNumber(result)}%</Text><View style={s.rewardRow}><RewardChip icon="zap" value={`+${formatNumber(earnedXp)} XP`} label="XP" /><RewardChip icon="activity" value={formatNumber(bestCombo)} label={t('lesson.chain', { count: formatNumber(bestCombo) })} /></View><Text style={s.centerBody}>{t('lesson.progressSaved')}</Text><ActionButton label={t('lesson.backPath')} direction="back" onPress={navigation.goBack} fullWidth /></View>
         : quiz < 0 ? <LessonSection item={item} index={section} />
         : question ? <QuizCard question={question} selected={selected} revealed={revealed} combo={combo} onSelect={setSelected} /> : null}
         </MotionView>
       </ScrollView>
-      {!finished ? <View style={s.lessonFooter}>{quiz >= 0 && selected === null ? <Text style={s.requiredAnswer}>{t('lesson.answerRequired')}</Text> : null}<ActionButton label={quiz < 0 ? (section === item.sections.length - 1 ? t('lesson.startQuiz') : t('lesson.nextSection')) : revealed ? (quiz === item.quiz.length - 1 ? t('lesson.submit') : t('lesson.nextQuestion')) : t('lesson.checkAnswer')} icon="arrow-left" onPress={advance} disabled={quiz >= 0 && selected === null} sound={quiz < 0 || revealed} fullWidth /></View> : null}
+      {!finished ? <View style={s.lessonFooter}>{quiz >= 0 && selected === null ? <Text style={s.requiredAnswer}>{t('lesson.answerRequired')}</Text> : null}<ActionButton label={quiz < 0 ? (section === item.sections.length - 1 ? t('lesson.startQuiz') : t('lesson.nextSection')) : revealed ? (quiz === item.quiz.length - 1 ? t('lesson.submit') : t('lesson.nextQuestion')) : t('lesson.checkAnswer')} direction="forward" onPress={advance} disabled={quiz >= 0 && selected === null} sound={quiz < 0 || revealed} fullWidth /></View> : null}
     </SafeAreaView>
   );
 }
@@ -836,11 +859,11 @@ function TestScreen({ route, navigation }: TestProps) {
       const subjectCorrect = subjectQuestions.filter((item) => answers[item.id] === item.correctIndex).length;
       return { subject, total: subjectQuestions.length, correct: subjectCorrect, score: subjectQuestions.length ? Math.round(subjectCorrect / subjectQuestions.length * 100) : 0 };
     }).filter((item) => item.total);
-    return <SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.testPage}><TopBar onBack={navigation.goBack} /><View style={s.result}><CelebrationBurst icon={score>=70?'award':'trending-up'} tone={score>=70?'success':'gold'} /><Text style={s.eyebrow}>{t('test.result', { stage })}</Text><Text style={s.pathHeroTitle}>{modeTitle}</Text><Text style={s.score}>{formatNumber(score)}%</Text><View style={s.rewardRow}><RewardChip icon="zap" value={`+${formatNumber(earnedXp)} XP`} label="XP" /><RewardChip icon="check-circle" value={formatNumber(correct)} label={t('common.correct')} /></View><Text style={s.centerBody}>{formatNumber(correct)}/{formatNumber(questions.length)} {t('common.correct')}</Text></View><SectionTitle title={t('test.breakdown')} /><View style={s.list}>{breakdown.map(({subject,total,correct:subjectCorrect,score:subjectScore})=><View key={subject.id} style={s.breakdownRow}><View style={s.flexEnd}><Text style={s.modeTitle}>{legalTitle(subject.title, subject.englishTitle)}</Text><Text style={s.hint}>{formatNumber(subjectCorrect)}/{formatNumber(total)} {t('common.correct')}</Text></View><View style={s.breakdownScore}><Text style={s.smallStrong}>{formatNumber(subjectScore)}%</Text></View></View>)}</View><ActionButton label={t('test.back')} icon="arrow-right" onPress={navigation.goBack} fullWidth /><Notice /></ScrollView></SafeAreaView>;
+    return <SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.testPage}><TopBar onBack={navigation.goBack} /><View style={s.result}><CelebrationBurst icon={score>=70?'award':'trending-up'} tone={score>=70?'success':'gold'} /><Text style={s.eyebrow}>{t('test.result', { stage })}</Text><Text style={s.pathHeroTitle}>{modeTitle}</Text><Text style={s.score}>{formatNumber(score)}%</Text><View style={s.rewardRow}><RewardChip icon="zap" value={`+${formatNumber(earnedXp)} XP`} label="XP" /><RewardChip icon="check-circle" value={formatNumber(correct)} label={t('common.correct')} /></View><Text style={s.centerBody}>{formatNumber(correct)}/{formatNumber(questions.length)} {t('common.correct')}</Text></View><SectionTitle title={t('test.breakdown')} /><View style={s.list}>{breakdown.map(({subject,total,correct:subjectCorrect,score:subjectScore})=><View key={subject.id} style={s.breakdownRow}><View style={s.flexEnd}><Text style={s.modeTitle}>{legalTitle(subject.title, subject.englishTitle)}</Text><Text style={s.hint}>{formatNumber(subjectCorrect)}/{formatNumber(total)} {t('common.correct')}</Text></View><View style={s.breakdownScore}><Text style={s.smallStrong}>{formatNumber(subjectScore)}%</Text></View></View>)}</View><ActionButton label={t('test.back')} direction="back" onPress={navigation.goBack} fullWidth /><Notice /></ScrollView></SafeAreaView>;
   }
 
   if (inBreak) {
-    return <SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.testPage}><TopBar onBack={navigation.goBack} /><View style={s.result}><View style={s.resultIcon}><Feather name="coffee" size={36} color={palette.white} /></View><Text style={s.eyebrow}>{t('test.sessionOneComplete', { stage })}</Text><Text style={s.pathHeroTitle}>{t('test.breakTitle')}</Text><Text style={s.centerBody}>{t('test.breakBody', { count: formatNumber(Math.min(90, answered)) })}</Text><ActionButton label={t('test.startSecond')} icon="arrow-left" onPress={() => { setIndex(90); setRemaining(153 * 60); setInBreak(false); }} fullWidth /></View><View style={s.examNote}><Feather name="shield" size={20} color={palette.primary} /><View style={s.flexEnd}><Text style={s.smallStrong}>{t('test.boundaryTitle')}</Text><Text style={s.hint}>{t('test.boundaryBody')}</Text></View></View><Notice /></ScrollView></SafeAreaView>;
+    return <SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.testPage}><TopBar onBack={navigation.goBack} /><View style={s.result}><View style={s.resultIcon}><Feather name="coffee" size={36} color={palette.white} /></View><Text style={s.eyebrow}>{t('test.sessionOneComplete', { stage })}</Text><Text style={s.pathHeroTitle}>{t('test.breakTitle')}</Text><Text style={s.centerBody}>{t('test.breakBody', { count: formatNumber(Math.min(90, answered)) })}</Text><ActionButton label={t('test.startSecond')} direction="forward" onPress={() => { setIndex(90); setRemaining(153 * 60); setInBreak(false); }} fullWidth /></View><View style={s.examNote}><Feather name="shield" size={20} color={palette.primary} /><View style={s.flexEnd}><Text style={s.smallStrong}>{t('test.boundaryTitle')}</Text><Text style={s.hint}>{t('test.boundaryBody')}</Text></View></View><Notice /></ScrollView></SafeAreaView>;
   }
 
   return <SafeAreaView style={s.safe}>
@@ -853,7 +876,7 @@ function TestScreen({ route, navigation }: TestProps) {
       <Text style={s.quizTitle}>{question.prompt}</Text>
       <View style={s.quizAnswers}>{question.answers.map((answer,answerIndex)=>{const chosen=answers[question.id]===answerIndex;return <Pressable key={answerIndex} accessibilityRole="radio" accessibilityState={{checked:chosen}} onPress={()=>setAnswers((items)=>({...items,[question.id]:answerIndex}))} style={({pressed})=>[s.answer,chosen&&s.answerChosen,pressed&&s.pressed]}><View style={[s.radio,chosen&&s.radioChosen]}>{chosen?<Feather name="check" size={13} color={palette.white}/>:null}</View><Text style={s.answerText}>{answer}</Text></Pressable>})}</View>
       {!currentAnswered ? <Text accessibilityLiveRegion="polite" style={s.requiredAnswer}>{t('test.answerRequired')}</Text> : null}
-      <View style={s.questionNav}><ActionButton label={t('test.previous')} icon="arrow-right" variant="quiet" onPress={()=>setIndex(Math.max(0,index-1))} disabled={index===0 || (mode === 'fullMock' && index === 90)} /><ActionButton label={index===questions.length-1?t('test.finish'):t('test.next')} icon="arrow-left" onPress={nextQuestion} disabled={!currentAnswered} /></View>
+      <View style={s.questionNav}><ActionButton label={t('test.previous')} direction="back" variant="quiet" onPress={()=>setIndex(Math.max(0,index-1))} disabled={index===0 || (mode === 'fullMock' && index === 90)} /><ActionButton label={index===questions.length-1?t('test.finish'):t('test.next')} direction="forward" onPress={nextQuestion} disabled={!currentAnswered} /></View>
       <Text style={s.centerBody}>{formatNumber(answered)}/{formatNumber(questions.length)} · {formatNumber(flagged.length)} {t('test.flagged')}</Text>
       </MotionView>
     </ScrollView>
@@ -884,7 +907,7 @@ function Review() {
     reviewAnswer(record!.questionId, selected === question.correctIndex);
     setSelected(null); setRevealed(false);
   };
-  return <Page><Header eyebrow={t('nav.review')} title={t('review.title')} subtitle={t('review.subtitle')} /><View style={s.stats}><Stat icon="inbox" value={formatNumber(due.length)} label={t('review.now')} color={palette.primary} soft={palette.primarySoft} /><Stat icon="calendar" value={formatNumber(state.reviewQueue.length - due.length)} label={t('review.later')} color={palette.teal} soft={palette.tealSoft} /></View>{question ? <View style={s.list}><Text style={s.hint}>{lesson ? legalTitle(lesson.title, lesson.englishTitle) : ''}</Text><QuizCard question={question} selected={selected} revealed={revealed} onSelect={setSelected} /><ActionButton label={revealed ? t('lesson.nextQuestion') : t('lesson.checkAnswer')} icon="arrow-left" onPress={advance} disabled={selected === null} sound={revealed} fullWidth /></View> : <Empty icon="check-circle" title={t('review.done')} body={t('review.subtitle')} />}<Notice /></Page>;
+  return <Page><Header eyebrow={t('nav.review')} title={t('review.title')} subtitle={t('review.subtitle')} /><View style={s.stats}><Stat icon="inbox" value={formatNumber(due.length)} label={t('review.now')} color={palette.primary} soft={palette.primarySoft} /><Stat icon="calendar" value={formatNumber(state.reviewQueue.length - due.length)} label={t('review.later')} color={palette.teal} soft={palette.tealSoft} /></View>{question ? <View style={s.list}><Text style={s.hint}>{lesson ? legalTitle(lesson.title, lesson.englishTitle) : ''}</Text><QuizCard question={question} selected={selected} revealed={revealed} onSelect={setSelected} /><ActionButton label={revealed ? t('lesson.nextQuestion') : t('lesson.checkAnswer')} direction="forward" onPress={advance} disabled={selected === null} sound={revealed} fullWidth /></View> : <Empty icon="check-circle" title={t('review.done')} body={t('review.subtitle')} />}<Notice /></Page>;
 }
 
 function Practice() {
@@ -960,7 +983,7 @@ function InsightsScreen({ navigation }: InsightsProps) {
 function HomeInsights({ analytics, onPress }: { analytics: LearningAnalytics; onPress: () => void }) {
   const focus = analytics.weaknesses[0];
   const { t, formatNumber, legalTitle } = useI18n();
-  return <View style={s.insightsTeaser}><View style={s.teaserTop}><View style={s.teaserIcon}><Feather name="bar-chart-2" size={24} color={palette.white} /></View><View style={s.flexEnd}><Text style={s.teaserEyebrow}>{t('insights.eyebrow')}</Text><Text style={s.teaserTitle}>{t('insights.readiness', { count: formatNumber(analytics.readiness) })}</Text></View></View><View style={s.teaserProgress}><ProgressBar value={analytics.readiness} color={palette.saffron} trackColor={palette.overlayBorder} /></View><View style={s.teaserBottom}><View style={s.teaserSignal}><Feather name={focus ? 'target' : 'activity'} size={17} color={palette.saffron} /><Text style={s.teaserSignalText}>{focus ? t('insights.focus', { subject: legalTitle(focus.title, focus.englishTitle) }) : t('insights.firstTest')}</Text></View><ActionButton label={t('insights.view')} icon="arrow-left" variant="secondary" onPress={onPress} /></View></View>;
+  return <View style={s.insightsTeaser}><View style={s.teaserTop}><View style={s.teaserIcon}><Feather name="bar-chart-2" size={24} color={palette.white} /></View><View style={s.flexEnd}><Text style={s.teaserEyebrow}>{t('insights.eyebrow')}</Text><Text style={s.teaserTitle}>{t('insights.readiness', { count: formatNumber(analytics.readiness) })}</Text></View></View><View style={s.teaserProgress}><ProgressBar value={analytics.readiness} color={palette.saffron} trackColor={palette.overlayBorder} /></View><View style={s.teaserBottom}><View style={s.teaserSignal}><Feather name={focus ? 'target' : 'activity'} size={17} color={palette.saffron} /><Text style={s.teaserSignalText}>{focus ? t('insights.focus', { subject: legalTitle(focus.title, focus.englishTitle) }) : t('insights.firstTest')}</Text></View><ActionButton label={t('insights.view')} direction="forward" variant="secondary" onPress={onPress} /></View></View>;
 }
 
 function InsightMetric({ icon, value, label, color, soft }: { icon: IconName; value: string; label: string; color: string; soft: string }) {
@@ -990,13 +1013,22 @@ function SubjectBullet({ item }: { item: SubjectInsight }) {
   return <View style={s.masteryRow}><View style={s.masteryHeading}><View style={[s.masteryStatus, { backgroundColor: soft }]}><Text style={[s.masteryStatusText, { color }]}>{status}</Text></View><View style={s.flexEnd}><Text style={s.masteryTitle}>{legalTitle(item.title, item.englishTitle)}</Text>{secondary ? <Text style={s.englishSmall}>{secondary}</Text> : null}</View></View><View style={s.masteryNumbers}><Text style={s.hint}>{measured ? t('insights.assessments', { count: formatNumber(item.evidenceCount) }) : t('insights.lessonCoverage', { count: formatNumber(item.coverage) })}</Text><Text style={[s.masteryScore, { color }]}>{formatNumber(value)}%</Text></View><ProgressBar value={value} color={color} trackColor={soft} /></View>;
 }
 
+type ProfileNavigation = CompositeNavigationProp<BottomTabNavigationProp<TabParams, 'Profile'>, NativeStackNavigationProp<RootStackParamList>>;
+
+const validExamDate = isValidCalendarDate;
+const daysUntilExam = daysUntilDate;
+
 function Profile() {
-  const nav = useRootNav();
-  const { state, cloud, streak, updateSettings, signOut, resetProgress } = useLearner();
+  const nav = useNavigation<ProfileNavigation>();
+  const { state, cloud, streak, updateSettings, signOut, resetProgress, restartTutorial } = useLearner();
   const { previewTap } = useSoundFeedback();
   const { t, formatNumber, isRtl } = useI18n();
   const [name, setName] = useState(state.name);
   const [nameError, setNameError] = useState('');
+  const [examDates, setExamDates] = useState(state.examDates);
+  const [examError, setExamError] = useState('');
+  const [examSaved, setExamSaved] = useState(false);
+  const guest = state.accountMode === 'guest';
   const saveName = () => {
     if (name.trim().length < 2) {
       setNameError(t('profile.nameError'));
@@ -1005,23 +1037,58 @@ function Profile() {
     updateSettings({ name: name.trim() });
     setNameError('');
   };
+  const saveExamDates = () => {
+    const invalid = (['FLK1', 'FLK2'] as const).find((stage) => examDates[stage] && !validExamDate(examDates[stage]));
+    if (invalid) {
+      setExamError(t('profile.examDateError', { stage: invalid }));
+      setExamSaved(false);
+      return;
+    }
+    updateSettings({ examDates });
+    setExamError('');
+    setExamSaved(true);
+  };
   const reset = () => Alert.alert(t('profile.resetTitle'), t('profile.resetBody'), [{ text: t('profile.cancel'), style: 'cancel' }, { text: t('profile.erase'), style: 'destructive', onPress: () => void resetProgress() }]);
   return (
     <Page>
-      <Header eyebrow={t('profile.eyebrow')} title={t('profile.title')} subtitle={state.accountMode === 'cloud' ? t('profile.cloudSubtitle') : t('profile.subtitle')} />
+      <Header eyebrow={guest ? t('profile.guestEyebrow') : t('profile.eyebrow')} title={t('profile.title')} subtitle={guest ? t('profile.guestSubtitle') : state.accountMode === 'cloud' ? t('profile.cloudSubtitle') : t('profile.subtitle')} />
       <View style={s.profile}>
         <View style={s.avatar}><Feather name="user" size={30} color={palette.white} /></View>
-        <View style={s.flexEnd}><Text style={s.profileName}>{state.name}</Text><Text style={s.profileHandle}>@{state.username}</Text><Text style={s.profileMeta}>{formatNumber(state.completedLessons.length)} {t('common.lessons')} · {formatNumber(streak)} {t('home.streak')}</Text></View>
+        <View style={s.flexEnd}><View style={s.profileIdentityLine}><Text style={s.profileName}>{guest ? t('profile.guestName') : state.name}</Text><View style={s.profileModeBadge}><Feather name={guest ? 'compass' : state.accountMode === 'cloud' ? 'cloud' : 'smartphone'} size={13} color={palette.saffron} /><Text style={s.profileModeText}>{guest ? t('profile.guestBadge') : state.accountMode === 'cloud' ? t('profile.cloudBadge') : t('profile.deviceBadge')}</Text></View></View><Text style={s.profileHandle}>{guest ? t('profile.localOnly') : `@${state.username}`}</Text><Text style={s.profileMeta}>{formatNumber(state.completedLessons.length)} {t('common.lessons')} · {formatNumber(streak)} {t('home.streak')} · {formatNumber(state.xp)} XP</Text></View>
+      </View>
+      {guest ? <View style={s.guestUpgrade}><View style={s.guestUpgradeIcon}><Feather name="cloud" size={23} color={palette.primary} /></View><View style={s.settingCopy}><Text style={s.settingTitle}>{t('profile.keepProgress')}</Text><Text style={s.hint}>{t('profile.keepProgressBody')}</Text></View><ActionButton label={t('profile.createAccount')} icon="user-plus" variant="secondary" onPress={() => void signOut()} /></View> : null}
+      <View style={s.profileQuickGrid}>
+        <ProfileAction icon="bookmark" value={formatNumber(state.savedLessons.length)} title={t('profile.savedLearning')} body={t('profile.savedLearningBody')} tone="primary" onPress={() => nav.navigate('Learn')} />
+        <ProfileAction icon="bar-chart-2" value={state.testHistory.length ? `${formatNumber(state.testHistory[0]!.score)}%` : '—'} title={t('profile.progressReport')} body={t('profile.progressReportBody')} tone="teal" onPress={() => nav.navigate('Insights')} />
+        <ProfileAction icon="edit-3" value={formatNumber(state.testHistory.length)} title={t('profile.practiceHistory')} body={t('profile.practiceHistoryBody')} tone="gold" onPress={() => nav.navigate('Practice')} />
+      </View>
+      <View style={s.settings}>
+        <View style={s.sectionTitleRow}><View style={s.sectionTitleIcon}><Feather name="calendar" size={20} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.sectionTitle}>{t('profile.examPlanner')}</Text><Text style={s.hint}>{t('profile.examPlannerBody')}</Text></View></View>
+        {(['FLK1', 'FLK2'] as const).map((stage) => {
+          const days = daysUntilExam(examDates[stage]);
+          return <View key={stage} style={s.examDateRow}><View style={s.examStageBadge}><Text style={s.examStageText}>{stage}</Text></View><TextInput value={examDates[stage]} onChangeText={(value) => { setExamDates((current) => ({ ...current, [stage]: value.replace(/[^0-9-]/g, '').slice(0, 10) })); setExamError(''); setExamSaved(false); }} placeholder="YYYY-MM-DD" placeholderTextColor={palette.muted} keyboardType="numbers-and-punctuation" autoCorrect={false} accessibilityLabel={t('profile.examDateLabel', { stage })} style={[s.examDateInput, Boolean(examError && examDates[stage] && !validExamDate(examDates[stage])) && s.inputError]} />{days !== null ? <View style={[s.examCountdown, days < 0 && s.examCountdownPast]}><Text style={s.examCountdownValue}>{days < 0 ? t('profile.examPassed') : t('profile.daysLeft', { count: formatNumber(days) })}</Text></View> : null}</View>;
+        })}
+        <FieldError message={examError} />
+        {examSaved ? <View style={s.inlineSuccess}><Feather name="check-circle" size={17} color={palette.teal} /><Text style={s.inlineSuccessText}>{t('profile.examSaved')}</Text></View> : null}
+        <ActionButton label={t('profile.saveExamDates')} icon="save" variant="secondary" fullWidth onPress={saveExamDates} />
+      </View>
+      <View style={s.settings}>
+        <View style={s.sectionTitleRow}><View style={[s.sectionTitleIcon, { backgroundColor: palette.tealSoft }]}><Feather name="award" size={20} color={palette.teal} /></View><View style={s.flexEnd}><Text style={s.sectionTitle}>{t('profile.studyTips')}</Text><Text style={s.hint}>{t('profile.studyTipsBody')}</Text></View></View>
+        <View style={s.tipGrid}>
+          <StudyTip icon="clock" title={t('profile.tipShortTitle')} body={t('profile.tipShortBody')} />
+          <StudyTip icon="refresh-cw" title={t('profile.tipReviewTitle')} body={t('profile.tipReviewBody')} />
+          <StudyTip icon="target" title={t('profile.tipTestTitle')} body={t('profile.tipTestBody')} />
+        </View>
       </View>
       <View style={s.settings}>
         <Text style={s.sectionTitle}>{t('profile.details')}</Text>
-        <RequiredLabel text={t('auth.displayName')} />
+        {!guest ? <><RequiredLabel text={t('auth.displayName')} />
         <View style={s.nameRow}>
           <TextInput value={name} onChangeText={(value) => { setName(value); setNameError(''); }} style={[s.nameInput, Boolean(nameError) && s.inputError]} textAlign={isRtl ? 'right' : 'left'} accessibilityLabel={t('auth.displayName')} />
           <Pressable accessibilityRole="button" accessibilityLabel={t('common.save')} onPress={saveName} style={({ pressed }) => [s.save, pressed && s.pressed]}><Text style={s.saveText}>{t('common.save')}</Text></Pressable>
         </View>
         <FieldError message={nameError} />
-        <View style={s.accountIdentity}><View style={s.iconSmall}><Feather name="at-sign" size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.label}>{t('auth.username')}</Text><Text style={s.accountUsername}>{state.username}</Text>{state.email ? <Text style={s.accountEmail}>{state.email}</Text> : null}</View></View>
+        <View style={s.accountIdentity}><View style={s.iconSmall}><Feather name="at-sign" size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.label}>{t('auth.username')}</Text><Text style={s.accountUsername}>{state.username}</Text>{state.email ? <Text style={s.accountEmail}>{state.email}</Text> : null}</View></View></> : <View style={s.accountIdentity}><View style={s.iconSmall}><Feather name="shield" size={19} color={palette.teal} /></View><View style={s.flexEnd}><Text style={s.label}>{t('profile.guestPrivacy')}</Text><Text style={s.hint}>{t('profile.guestPrivacyBody')}</Text></View></View>}
         {state.accountMode === 'cloud' ? <View style={s.accountIdentity}><View style={s.iconSmall}><Feather name="cloud" size={19} color={cloud.syncStatus === 'error' ? palette.rose : palette.teal} /></View><View style={s.flexEnd}><Text style={s.label}>{t('profile.cloudSync')}</Text><Text style={s.hint}>{cloud.syncStatus === 'syncing' ? t('profile.syncing') : cloud.syncStatus === 'error' ? t('profile.syncError') : t('profile.synced')}</Text></View></View> : null}
         <Text style={s.label}>{t('auth.dailyGoal')}</Text>
         <GoalPicker value={state.dailyGoal} onChange={(dailyGoal) => updateSettings({ dailyGoal })} />
@@ -1040,25 +1107,38 @@ function Profile() {
         <ThemePicker value={state.themeMode} onChange={(themeMode) => updateSettings({ themeMode })} />
         <View style={s.settingRow}>
           <View style={s.iconSmall}><Feather name="volume-2" size={19} color={palette.primary} /></View>
-          <View style={s.flexEnd}><Text style={s.cardTitle}>{t('profile.sound')}</Text><Text style={s.hint}>{t('profile.soundHelper')}</Text></View>
-          <Switch accessibilityLabel={t('profile.sound')} value={state.soundEffectsEnabled} onValueChange={(soundEffectsEnabled) => { updateSettings({ soundEffectsEnabled }); if (soundEffectsEnabled) previewTap(); }} trackColor={{ false: palette.line, true: palette.primarySoft }} thumbColor={state.soundEffectsEnabled ? palette.primary : palette.muted} />
+          <View style={s.settingCopy}><Text style={s.settingTitle}>{t('profile.sound')}</Text><Text style={s.hint}>{t('profile.soundHelper')}</Text></View>
+          <View style={s.switchHitArea}>
+            <Switch accessibilityLabel={t('profile.sound')} value={state.soundEffectsEnabled} onValueChange={(soundEffectsEnabled) => { updateSettings({ soundEffectsEnabled }); if (soundEffectsEnabled) previewTap(); }} trackColor={{ false: palette.line, true: palette.primarySoft }} thumbColor={state.soundEffectsEnabled ? palette.primary : palette.muted} />
+          </View>
         </View>
       </View>
       <View style={s.settings}>
         <Text style={s.sectionTitle}>{t('profile.contentTransparency')}</Text>
-        <View style={s.settingRow}><View style={s.iconSmall}><Feather name="database" size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>{t('profile.specCurrent')}</Text><Text style={s.hint}>{t('profile.specSummary', { lessons: formatNumber(sqeTotals.lessons), stations: formatNumber(sqeTotals.sqe2Stations) })}</Text></View></View>
-        <View style={s.settingRow}><View style={s.iconSmall}><Feather name="lock" size={19} color={palette.teal} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>{state.accountMode === 'cloud' ? t('profile.cloudPrivacy') : t('profile.offlinePrivacy')}</Text><Text style={s.hint}>{state.accountMode === 'cloud' ? t('profile.cloudPrivacyDetail') : 'PIN · offline-first · no analytics SDK'}</Text></View></View>
-        <View style={s.settingRow}><View style={s.iconSmall}><Feather name="alert-circle" size={19} color={palette.rose} /></View><View style={s.flexEnd}><Text style={s.cardTitle}>{t('profile.independent')}</Text><Text style={s.hint}>{t('profile.independentDetail')}</Text></View></View>
+        <View style={s.settingRow}><View style={s.iconSmall}><Feather name="database" size={19} color={palette.primary} /></View><View style={s.settingCopy}><Text style={s.settingTitle}>{t('profile.specCurrent')}</Text><Text style={s.hint}>{t('profile.specSummary', { lessons: formatNumber(sqeTotals.lessons), stations: formatNumber(sqeTotals.sqe2Stations) })}</Text></View></View>
+        <View style={s.settingRow}><View style={s.iconSmall}><Feather name="lock" size={19} color={palette.teal} /></View><View style={s.settingCopy}><Text style={s.settingTitle}>{state.accountMode === 'cloud' ? t('profile.cloudPrivacy') : guest ? t('profile.guestPrivacy') : t('profile.offlinePrivacy')}</Text><Text style={s.hint}>{state.accountMode === 'cloud' ? t('profile.cloudPrivacyDetail') : guest ? t('profile.guestPrivacyBody') : 'PIN · offline-first · no analytics SDK'}</Text></View></View>
+        <View style={s.settingRow}><View style={s.iconSmall}><Feather name="alert-circle" size={19} color={palette.rose} /></View><View style={s.settingCopy}><Text style={s.settingTitle}>{t('profile.independent')}</Text><Text style={s.hint}>{t('profile.independentDetail')}</Text></View></View>
       </View>
       <View style={s.settings}>
         <Pressable accessibilityRole="button" accessibilityLabel={t('assistant.title')} onPress={() => nav.navigate('AIChat')} style={({ pressed }) => [s.supportEntry, pressed && s.pressed]}><View style={s.iconSmall}><Feather name="message-circle" size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.modeTitle}>{t('assistant.title')}</Text><Text style={s.hint}>{onlineAssistantConfigured ? t('assistant.online') : t('assistant.offline')}</Text></View><DirectionalChevron size={20} color={palette.muted} /></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('profile.replayTutorial')} onPress={restartTutorial} style={({ pressed }) => [s.supportEntry, pressed && s.pressed]}><View style={s.iconSmall}><Feather name="play-circle" size={19} color={palette.saffron} /></View><View style={s.flexEnd}><Text style={s.modeTitle}>{t('profile.replayTutorial')}</Text><Text style={s.hint}>{t('profile.replayTutorialBody')}</Text></View><DirectionalChevron size={20} color={palette.muted} /></Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={t('support.title')} onPress={() => nav.navigate('Support')} style={({ pressed }) => [s.supportEntry, pressed && s.pressed]}><View style={s.iconSmall}><Feather name="help-circle" size={19} color={palette.teal} /></View><View style={s.flexEnd}><Text style={s.modeTitle}>{t('support.title')}</Text><Text style={s.hint}>{t('support.subtitle')}</Text></View><DirectionalChevron size={20} color={palette.muted} /></Pressable>
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel={t('profile.signOut')} onPress={() => void signOut()} style={({ pressed }) => [s.signOut, pressed && s.pressed]}><Feather name="log-out" size={18} color={palette.primary} /><Text style={s.signOutText}>{t('profile.signOut')}</Text></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel={guest ? t('profile.leaveGuest') : t('profile.signOut')} onPress={() => void signOut()} style={({ pressed }) => [s.signOut, pressed && s.pressed]}><Feather name="log-out" size={18} color={palette.primary} /><Text style={s.signOutText}>{guest ? t('profile.leaveGuest') : t('profile.signOut')}</Text></Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel={t('profile.reset')} onPress={reset} style={({ pressed }) => [s.danger, pressed && s.pressed]}><Feather name="trash-2" size={18} color={palette.rose} /><Text style={s.dangerText}>{t('profile.reset')}</Text></Pressable>
       <Notice />
     </Page>
   );
+}
+
+function ProfileAction({ icon, value, title, body, tone, onPress }: { icon: IconName; value: string; title: string; body: string; tone: 'primary' | 'teal' | 'gold'; onPress: () => void }) {
+  const color = tone === 'teal' ? palette.teal : tone === 'gold' ? palette.goldInk : palette.primary;
+  const background = tone === 'teal' ? palette.tealSoft : tone === 'gold' ? palette.saffronSoft : palette.primarySoft;
+  return <Pressable accessibilityRole="button" accessibilityLabel={`${title}: ${value}`} onPress={onPress} style={({ pressed }) => [s.profileAction, pressed && s.cardPressed]}><View style={[s.profileActionIcon, { backgroundColor: background }]}><Feather name={icon} size={20} color={color} /></View><Text style={s.profileActionValue}>{value}</Text><Text style={s.profileActionTitle}>{title}</Text><Text style={s.profileActionBody}>{body}</Text></Pressable>;
+}
+
+function StudyTip({ icon, title, body }: { icon: IconName; title: string; body: string }) {
+  return <View style={s.studyTip}><View style={s.studyTipIcon}><Feather name={icon} size={19} color={palette.teal} /></View><View style={s.settingCopy}><Text style={s.settingTitle}>{title}</Text><Text style={s.hint}>{body}</Text></View></View>;
 }
 
 type AIChatProps = NativeStackScreenProps<RootStackParamList, 'AIChat'>;
@@ -1246,22 +1326,27 @@ function LanguagePicker({ value, onChange, compact = false }: { value: AppLangua
 
 function Page({ children }: { children: ReactNode }) {
   const { width } = useWindowDimensions();
-  return <SafeAreaView style={s.safe}><ScrollView contentContainerStyle={[s.page, width >= 1100 && s.pageWide]}><MotionView style={s.pageMotion} distance={14} duration={motion.relaxed}>{children}</MotionView></ScrollView></SafeAreaView>;
+  return <SafeAreaView style={s.safe}>
+    {darkMode ? <View accessible={false} style={s.pageAtmosphere}><View style={s.ambientPrimary} /><View style={s.ambientTeal} /><View style={s.ambientWarm} /></View> : null}
+    <ScrollView contentContainerStyle={[s.page, width >= 1100 && s.pageWide]}><MotionView role="main" style={s.pageMotion} distance={10} duration={motion.standard}>{children}</MotionView></ScrollView>
+  </SafeAreaView>;
 }
 function Header({ eyebrow, title, subtitle }: { eyebrow: string; title: string; subtitle: string }) {
-  return <View style={s.header}><Brand /><View style={s.flexEnd}><View style={s.headerEyebrow}><View style={s.headerDot} /><Text style={s.eyebrow}>{eyebrow}</Text></View><Text style={s.pageTitle}>{title}</Text><Text style={s.body}>{subtitle}</Text></View></View>;
+  return <View style={s.header}><Brand /><View style={s.flexEnd}><View style={s.headerEyebrow}><View style={s.headerDot} /><Text style={s.eyebrow}>{eyebrow}</Text></View><Text role="heading" style={s.pageTitle}>{title}</Text><Text style={s.body}>{subtitle}</Text></View></View>;
 }
 function TopBar({ onBack }: { onBack: () => void }) { const { t, isRtl } = useI18n(); return <View style={s.topBar}><Brand /><RoundIcon icon={isRtl ? 'arrow-right' : 'arrow-left'} label={t('common.back')} onPress={onBack} /></View>; }
 function DirectionalChevron({ size, color }: { size: number; color: string }) { const { isRtl } = useI18n(); return <Feather name={isRtl ? 'chevron-left' : 'chevron-right'} size={size} color={color} />; }
 function RoundIcon({ icon, label, onPress, active }: { icon: IconName; label: string; onPress: () => void; active?: boolean }) { return <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [s.round, pressed && s.pressed]}><Feather name={icon} size={21} color={active ? palette.primary : palette.ink} /></Pressable>; }
 function GoalPicker({ value, onChange }: { value: number; onChange: (value: number) => void }) { const { t, formatNumber } = useI18n(); return <View style={s.goalRow}>{[1, 2, 3].map((item) => <Pressable key={item} accessibilityRole="radio" accessibilityLabel={`${formatNumber(item)} ${t('common.lessons')}`} accessibilityState={{ checked: value === item }} onPress={() => onChange(item)} style={({ pressed }) => [s.goalChoice, value === item && s.goalActive, pressed && s.pressed]}><Text style={[s.goalNumber, value === item && s.goalNumberActive]}>{formatNumber(item)}</Text><Text style={s.hint}>{t('common.lesson')}</Text></Pressable>)}</View>; }
-function SectionTitle({ title }: { title: string }) { return <View style={s.sectionHeading}><View style={s.sectionMarker} /><Text style={s.sectionTitle}>{title}</Text></View>; }
+function SectionTitle({ title }: { title: string }) { return <View style={s.sectionHeading}><View style={s.sectionMarker} /><Text role="heading" style={s.sectionTitle}>{title}</Text></View>; }
 function Pill({ icon, text }: { icon: IconName; text: string }) { return <View style={s.pill}><Feather name={icon} size={14} color={palette.goldInk} /><Text style={s.pillText}>{text}</Text></View>; }
 function Meta({ icon, text }: { icon: IconName; text: string }) { return <View style={s.meta}><Feather name={icon} size={14} color={palette.muted} /><Text style={s.hint}>{text}</Text></View>; }
 function Stat({ icon, value, label, color, soft }: { icon: IconName; value: string; label: string; color: string; soft: string }) { return <View style={s.stat}><View style={[s.statAccent, { backgroundColor: color }]} /><View style={[s.iconSmall, { backgroundColor: soft }]}><Feather name={icon} size={20} color={color} /></View><Text style={s.statValue}>{value}</Text><Text style={s.hint}>{label}</Text></View>; }
-function PathCard({ item, onPress }: { item: Pathway; onPress: () => void }) {
+function PathCard({ item, onPress, wide = false }: { item: Pathway; onPress: () => void; wide?: boolean }) {
+  const { width } = useWindowDimensions();
   const { state } = useLearner();
   const { t, formatNumber, legalTitle, secondaryLegalTitle, language } = useI18n();
+  const featureLayout = wide && width >= 700;
   const complete = item.lessonIds.filter((id) => state.completedLessons.includes(id)).length;
   const percent = Math.round((complete / item.lessonIds.length) * 100);
   const progressLabel = percent ? `${formatNumber(percent)}% ${t('common.completed')}` : t('common.notStarted');
@@ -1271,12 +1356,12 @@ function PathCard({ item, onPress }: { item: Pathway; onPress: () => void }) {
       ? item.level
       : t(item.id === 'immigration' ? 'learn.level.beginnerIntermediate' : ['housing', 'police'].includes(item.id) ? 'learn.level.applied' : 'learn.level.beginner');
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`${legalTitle(item.title, item.englishTitle)}, ${progressLabel}`} onPress={onPress} style={({ pressed }) => [s.pathCard, pressed && s.pathCardPressed]}>
-      <ImageBackground source={subjectArtFor(item.id)} resizeMode="cover" style={s.pathArtwork} imageStyle={s.pathArtworkImage} accessible={false} accessibilityIgnoresInvertColors>
+    <Pressable accessibilityRole="button" accessibilityLabel={`${legalTitle(item.title, item.englishTitle)}, ${progressLabel}`} onPress={onPress} style={({ pressed }) => [s.pathCard, wide && s.pathCardWide, pressed && s.pathCardPressed]}>
+      <ImageBackground source={subjectArtFor(item.id)} resizeMode="cover" style={s.pathArtwork} imageStyle={[s.pathArtworkImage, featureLayout && s.pathArtworkImageWide]} accessible={false} accessibilityIgnoresInvertColors>
         <View style={s.pathArtScrim} />
         <View style={s.pathArtFade} />
         <View style={s.pathArtFadeSoft} />
-        <View style={s.pathCardContent}>
+        <View style={[s.pathCardContent, featureLayout && s.pathCardContentWide]}>
           <View style={s.between}>
             <View style={s.pathIconOnImage}><Feather name={item.icon} size={22} color={palette.white} /></View>
             <View style={s.pathLevel}><Text style={s.pathLevelText}>{levelLabel}</Text></View>
@@ -1303,31 +1388,41 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   const shadow = createShadow(palette);
   // Web follows document.dir; reversing again here would turn RTL rows back into LTR.
   const rowDirection = Platform.OS === 'web' ? 'row' : isRtl ? 'row-reverse' : 'row';
-  const logicalEnd = isRtl ? 'flex-end' : 'flex-start';
+  // On web, document.dir already maps flex-start to the language's leading edge.
+  // Native does not inherit that CSS direction, so it still needs a physical edge.
+  const logicalEnd = Platform.OS === 'web' ? 'flex-start' : isRtl ? 'flex-end' : 'flex-start';
   return StyleSheet.create({
   flex: { flex: 1 },
   flexEnd: { flex: 1, alignItems: logicalEnd },
   safe: { flex: 1, backgroundColor: palette.background },
+  pageAtmosphere: { ...StyleSheet.absoluteFillObject, overflow: 'hidden', pointerEvents: 'none' },
+  ambientPrimary: { position: 'absolute', width: 520, height: 520, top: -290, right: -210, borderRadius: 260, backgroundColor: palette.ambientPrimary },
+  ambientTeal: { position: 'absolute', width: 420, height: 420, top: '38%', left: -270, borderRadius: 210, backgroundColor: palette.ambientSecondary },
+  ambientWarm: { position: 'absolute', width: 300, height: 300, bottom: -190, right: '12%', borderRadius: 150, backgroundColor: palette.ambientWarm },
   pressed: { opacity: 0.84, transform: [{ scale: 0.985 }] },
   disabled: { opacity: 0.5 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, backgroundColor: palette.background },
   loadingLogo: { width: 62, height: 62, borderRadius: 21, backgroundColor: palette.primaryAction, alignItems: 'center', justifyContent: 'center' },
   tabsMobile: { position: 'absolute', left: 12, right: 12, bottom: 10, height: 82, paddingHorizontal: 6, paddingTop: 6, paddingBottom: 6, borderTopWidth: 0, borderWidth: 1, borderColor: palette.line, borderRadius: 26, backgroundColor: palette.surface, ...shadow },
-  tabsDesktop: { width: 214, margin: 12, paddingTop: 24, paddingHorizontal: 10, paddingBottom: 18, borderRightWidth: 0, borderWidth: 1, borderColor: palette.line, borderRadius: 28, backgroundColor: palette.surface, ...shadow },
+  tabsDesktopHost: { position: 'relative', width: 238, flexShrink: 0, backgroundColor: palette.background },
+  tabsDesktop: { width: 214, margin: 12, paddingTop: 24, paddingHorizontal: 10, paddingBottom: 18, borderTopWidth: 0, borderRightWidth: 0, backgroundColor: 'transparent' },
   tabItem: { minHeight: 62, marginHorizontal: 2, marginVertical: 2, borderRadius: 18, overflow: 'hidden' },
   tabItemDesktop: { minHeight: 64, marginHorizontal: 0, marginVertical: 3 },
   navIcon: { position: 'relative', width: 31, height: 31, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.surfaceMuted },
-  navIconActive: { backgroundColor: palette.primaryAction },
+  navIconActive: { backgroundColor: palette.primaryAction, ...createAccentGlow(palette) },
   navLabel: { color: palette.muted, fontSize: 10, lineHeight: 15, fontWeight: '700', textAlign: 'center', writingDirection: 'rtl' },
   navLabelDesktop: { fontSize: 12, lineHeight: 18, textAlign: 'right' },
   navLabelActive: { color: palette.primaryDark, fontWeight: '900' },
   navActiveDot: { position: 'absolute', width: 7, height: 7, top: -2, right: -2, borderRadius: 4, backgroundColor: palette.saffron, borderWidth: 1, borderColor: palette.surface },
-  sidebarBackdrop: { ...StyleSheet.absoluteFillObject, pointerEvents: 'none', overflow: 'hidden', borderRadius: 28, backgroundColor: palette.surface },
+  sidebarBackdrop: { position: 'absolute', pointerEvents: 'none', overflow: 'hidden', top: 12, right: 12, bottom: 12, left: 12, borderWidth: 1, borderColor: palette.line, borderRadius: 28, backgroundColor: palette.surface, ...shadow },
   sidebarGlow: { position: 'absolute', width: 190, height: 190, top: -110, left: -80, borderRadius: 95, backgroundColor: palette.primarySoft, opacity: 0.72 },
-  sidebarArtwork: { position: 'absolute', left: 12, right: 12, bottom: 12, height: 190, overflow: 'hidden', justifyContent: 'flex-end' },
+  sidebarArtworkButton: { position: 'absolute', zIndex: 1, left: 24, right: 24, bottom: 24, height: 190, overflow: 'hidden', borderRadius: 22 },
+  sidebarArtworkPressed: { opacity: 0.86, transform: [{ scale: 0.985 }] },
+  sidebarArtwork: { flex: 1, width: '100%', justifyContent: 'flex-end' },
   sidebarArtworkImage: { borderRadius: 22 },
   sidebarArtworkScrim: { ...StyleSheet.absoluteFillObject, borderRadius: 22, backgroundColor: palette.imageScrimStrong, opacity: 0.7 },
   sidebarArtworkContent: { padding: 16, alignItems: logicalEnd },
+  sidebarArtworkTop: { width: '100%', flexDirection: rowDirection, alignItems: 'center', justifyContent: 'space-between' },
   sidebarArtworkIcon: { width: 39, height: 39, marginBottom: 11, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.overlaySurface, borderWidth: 1, borderColor: palette.overlayBorder },
   sidebarArtworkTitle: { color: palette.white, fontSize: 14, lineHeight: 22, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
   sidebarArtworkMeta: { color: palette.onPrimaryMuted, fontSize: 10, lineHeight: 17, textAlign: 'right', writingDirection: 'rtl', marginTop: 4 },
@@ -1338,6 +1433,9 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   detailPage: { width: '100%', maxWidth: 900, alignSelf: 'center', padding: 20, paddingBottom: 70, gap: 20 },
   onboardScroll: { flexGrow: 1, justifyContent: 'center', padding: 20 },
   onboardCard: { width: '100%', maxWidth: 610, alignSelf: 'center', gap: 18, padding: 28, borderWidth: 1, borderColor: palette.line, borderRadius: radius.xl, backgroundColor: palette.surface, ...shadow },
+  authTopRow: { flexDirection: rowDirection, alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  authBack: { minHeight: 48, flexDirection: rowDirection, alignItems: 'center', gap: 7, paddingHorizontal: 12, borderRadius: radius.md, backgroundColor: palette.surfaceMuted },
+  authBackText: { color: palette.ink, fontSize: 12, fontWeight: '800' },
   onboardTitle: { color: palette.ink, fontSize: 30, lineHeight: 43, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
   authIntro: { flexDirection: rowDirection, alignItems: 'center', gap: 14 },
   requiredMark: { color: palette.rose },
@@ -1385,7 +1483,7 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   heroGlowSmall: { position: 'absolute', width: 120, height: 120, borderRadius: 60, bottom: -70, right: 120, backgroundColor: palette.saffronSoft, opacity: 0.62, pointerEvents: 'none' },
   heroCopy: { flex: 2, minWidth: 260, alignItems: logicalEnd, gap: 8 },
   heroTitle: { color: palette.ink, fontSize: 26, lineHeight: 38, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
-  goalCard: { flex: 1, minWidth: 180, minHeight: 210, padding: 20, borderRadius: radius.lg, backgroundColor: palette.brandSurface, alignItems: 'center', justifyContent: 'center', gap: 7 },
+  goalCard: { flex: 1, minWidth: 180, minHeight: 210, padding: 20, borderWidth: 1, borderColor: palette.overlayBorder, borderRadius: radius.lg, backgroundColor: palette.brandSurface, alignItems: 'center', justifyContent: 'center', gap: 7, ...createAccentGlow(palette) },
   goalIcon: { width: 58, height: 58, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.overlaySurface, borderWidth: 1, borderColor: palette.overlayBorder },
   goalProgress: { width: '100%', maxWidth: 150, marginTop: 8 },
   goalBig: { color: palette.white, fontSize: 38, fontFamily: type.latinBold, marginTop: 8 },
@@ -1417,14 +1515,25 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   sectionMarker: { width: 5, height: 25, borderRadius: radius.round, backgroundColor: palette.saffron },
   sectionTitle: { flexShrink: 1, color: palette.ink, fontSize: 22, lineHeight: 32, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
   grid: { flexDirection: rowDirection, flexWrap: 'wrap', gap: 15 },
+  pagination: { minHeight: 70, flexDirection: rowDirection, alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: 10, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.surface },
+  pageButton: { minWidth: 112, minHeight: 48, flexDirection: rowDirection, alignItems: 'center', justifyContent: 'center', gap: 7, paddingHorizontal: 14, borderRadius: radius.md, backgroundColor: palette.primarySoft, borderWidth: 1, borderColor: palette.secondaryBorder },
+  pageButtonText: { color: palette.primary, fontSize: 12, lineHeight: 18, fontWeight: '900', writingDirection: 'rtl' },
+  pageStatus: { minWidth: 76, alignItems: 'center', justifyContent: 'center', gap: 7 },
+  pageStatusText: { color: palette.inkSoft, fontSize: 12, fontFamily: type.latinBold },
+  pageDots: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  pageDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: palette.line },
+  pageDotActive: { width: 20, backgroundColor: palette.primaryAction },
   pathCard: { flexGrow: 1, flexBasis: 285, minWidth: 270, maxWidth: 555, minHeight: 300, overflow: 'hidden', borderWidth: 1, borderColor: palette.overlayBorder, borderRadius: radius.xl, backgroundColor: palette.brandSurface, ...shadow },
+  pathCardWide: { width: '100%', maxWidth: '100%', flexBasis: '100%' },
   pathCardPressed: { opacity: 0.9, transform: [{ scale: 0.99 }] },
   pathArtwork: { flex: 1, minHeight: 300, padding: 20, justifyContent: 'center' },
   pathArtworkImage: { borderRadius: radius.xl },
+  pathArtworkImageWide: { left: '42%', width: '58%', height: '100%' },
   pathArtScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: palette.imageScrim },
   pathArtFade: { position: 'absolute', top: 0, bottom: 0, left: 0, width: '64%', backgroundColor: palette.imageScrimStrong },
   pathArtFadeSoft: { position: 'absolute', top: 0, bottom: 0, left: '58%', width: '18%', backgroundColor: palette.imageScrimStrong, opacity: 0.42 },
   pathCardContent: { zIndex: 1, width: '70%', minWidth: 215, minHeight: 258, alignSelf: 'flex-start', justifyContent: 'space-between', alignItems: 'stretch' },
+  pathCardContentWide: { width: '58%', maxWidth: 620 },
   pathIconOnImage: { width: 44, height: 44, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.overlaySurface, borderWidth: 1, borderColor: palette.overlayBorder },
   pathLevel: { minHeight: 29, maxWidth: 122, paddingHorizontal: 10, borderRadius: radius.round, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.overlaySurface, borderWidth: 1, borderColor: palette.overlayBorder },
   pathLevelText: { color: palette.white, fontSize: 10, lineHeight: 16, fontWeight: '800', writingDirection: 'rtl' },
@@ -1491,10 +1600,35 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   searchResult: { minHeight: 80, flexDirection: rowDirection, alignItems: 'center', gap: 12, padding: 14, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.surface },
   profile: { flexDirection: rowDirection, alignItems: 'center', gap: 15, padding: 21, borderRadius: radius.xl, backgroundColor: palette.brandSurface },
   avatar: { width: 60, height: 60, borderRadius: 20, backgroundColor: palette.primaryAction, alignItems: 'center', justifyContent: 'center' },
+  profileIdentityLine: { flexDirection: rowDirection, flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  profileModeBadge: { minHeight: 29, flexDirection: rowDirection, alignItems: 'center', gap: 5, paddingHorizontal: 9, borderRadius: radius.round, backgroundColor: palette.overlaySurface, borderWidth: 1, borderColor: palette.overlayBorder },
+  profileModeText: { color: palette.white, fontSize: 9, lineHeight: 14, fontWeight: '900' },
   profileName: { color: palette.white, fontSize: 21, fontWeight: '900', writingDirection: 'rtl' },
   profileHandle: { color: palette.onPrimaryMuted, fontSize: 12, fontFamily: type.latinSemibold, marginTop: 3 },
   profileMeta: { color: palette.onPrimaryMuted, fontSize: 11, writingDirection: 'rtl', marginTop: 4 },
+  guestUpgrade: { flexDirection: rowDirection, flexWrap: 'wrap', alignItems: 'center', gap: 12, padding: 16, borderWidth: 1, borderColor: palette.secondaryBorder, borderRadius: radius.lg, backgroundColor: palette.primarySoft },
+  guestUpgradeIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.surface },
+  profileQuickGrid: { flexDirection: rowDirection, flexWrap: 'wrap', gap: 11 },
+  profileAction: { flexGrow: 1, flexBasis: 190, minWidth: 150, minHeight: 166, gap: 7, padding: 16, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.surface, ...shadow },
+  profileActionIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  profileActionValue: { color: palette.ink, fontSize: 25, fontFamily: type.latinBold, fontVariant: ['tabular-nums'] },
+  profileActionTitle: { color: palette.ink, fontSize: 14, lineHeight: 21, fontWeight: '900' },
+  profileActionBody: { color: palette.muted, fontSize: 10, lineHeight: 17 },
   settings: { gap: 13, padding: 19, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.surface, ...shadow },
+  sectionTitleRow: { flexDirection: rowDirection, alignItems: 'center', gap: 12 },
+  sectionTitleIcon: { width: 44, height: 44, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.primarySoft },
+  examDateRow: { minHeight: 62, flexDirection: rowDirection, alignItems: 'center', gap: 9, padding: 9, borderWidth: 1, borderColor: palette.line, borderRadius: radius.md, backgroundColor: palette.background },
+  examStageBadge: { minWidth: 55, minHeight: 42, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, borderRadius: radius.sm, backgroundColor: palette.brandSurface },
+  examStageText: { color: palette.white, fontSize: 12, fontFamily: type.latinBold },
+  examDateInput: { flex: 1, minWidth: 118, minHeight: 44, paddingHorizontal: 11, color: palette.ink, fontSize: 14, fontFamily: type.latinMedium, writingDirection: 'ltr', textAlign: 'left', borderWidth: 1, borderColor: palette.line, borderRadius: radius.sm, backgroundColor: palette.surface },
+  examCountdown: { minHeight: 38, justifyContent: 'center', paddingHorizontal: 10, borderRadius: radius.sm, backgroundColor: palette.tealSoft },
+  examCountdownPast: { backgroundColor: palette.roseSoft },
+  examCountdownValue: { color: palette.tealInk, fontSize: 10, lineHeight: 16, fontWeight: '900' },
+  inlineSuccess: { flexDirection: rowDirection, alignItems: 'center', gap: 8, padding: 10, borderRadius: radius.sm, backgroundColor: palette.tealSoft },
+  inlineSuccessText: { flex: 1, color: palette.tealInk, fontSize: 11, lineHeight: 18, fontWeight: '800' },
+  tipGrid: { gap: 9 },
+  studyTip: { minHeight: 82, flexDirection: rowDirection, alignItems: 'center', gap: 11, padding: 13, borderRadius: radius.md, backgroundColor: palette.tealSoft, borderWidth: 1, borderColor: palette.line },
+  studyTipIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.surface },
   supportEntry: { flexDirection: rowDirection, alignItems: 'center', gap: 12, minHeight: 70, padding: 13, borderWidth: 1, borderColor: palette.secondaryBorder, borderRadius: radius.md, backgroundColor: palette.primarySoft },
   nameRow: { flexDirection: rowDirection, gap: 8 },
   nameInput: { flex: 1, minHeight: 49, paddingHorizontal: 13, color: palette.ink, fontSize: 15, writingDirection: isRtl ? 'rtl' : 'ltr', borderWidth: 1, borderColor: palette.line, borderRadius: radius.md, backgroundColor: palette.background },
@@ -1503,7 +1637,10 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   accountIdentity: { minHeight: 76, flexDirection: rowDirection, alignItems: 'center', gap: 11, padding: 13, borderRadius: radius.md, backgroundColor: palette.background, borderWidth: 1, borderColor: palette.line },
   accountUsername: { color: palette.primary, fontSize: 14, fontFamily: type.latinSemibold, marginTop: 2 },
   accountEmail: { color: palette.muted, fontSize: 11, fontFamily: type.latinMedium, marginTop: 3, writingDirection: 'ltr' },
-  settingRow: { minHeight: 68, flexDirection: rowDirection, alignItems: 'center', gap: 11, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 12 },
+  settingRow: { minHeight: 68, flexDirection: rowDirection, alignItems: 'center', gap: 11, borderTopWidth: 1, borderTopColor: palette.line, paddingVertical: 12 },
+  settingCopy: { flex: 1, minWidth: 0, alignItems: logicalEnd, justifyContent: 'center', gap: 2 },
+  settingTitle: { color: palette.ink, fontSize: 14, lineHeight: 22, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
+  switchHitArea: { minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
   preferenceHeading: { alignItems: logicalEnd, gap: 3, marginTop: 2 },
   themePicker: { flexDirection: rowDirection, gap: 8, padding: 6, borderRadius: radius.lg, backgroundColor: palette.background, borderWidth: 1, borderColor: palette.line },
   themeChoice: { flex: 1, minHeight: 70, alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 8, borderRadius: radius.md, borderWidth: 1, borderColor: 'transparent' },

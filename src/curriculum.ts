@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react';
-import type { Feather } from '@expo/vector-icons';
+import type Feather from '@expo/vector-icons/Feather';
 
 import { sqeLessons, sqePathways } from './sqe';
 

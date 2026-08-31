@@ -38,6 +38,10 @@ export type AppPalette = {
   overlaySurface: string;
   imageScrim: string;
   imageScrimStrong: string;
+  ambientPrimary: string;
+  ambientSecondary: string;
+  ambientWarm: string;
+  accentGlow: string;
   shadow: string;
 };
 
@@ -76,44 +80,52 @@ export const lightPalette: AppPalette = {
   overlaySurface: 'rgba(255,255,255,0.08)',
   imageScrim: 'rgba(255,255,255,0.08)',
   imageScrimStrong: 'rgba(8,12,28,0.70)',
+  ambientPrimary: 'rgba(75,61,184,0.05)',
+  ambientSecondary: 'rgba(8,127,120,0.04)',
+  ambientWarm: 'rgba(226,161,29,0.035)',
+  accentGlow: 'rgba(75,61,184,0.14)',
   shadow: '#2F267A',
 };
 
 export const darkPalette: AppPalette = {
-  background: '#0B1020',
-  surface: '#131A2C',
-  surfaceMuted: '#1B2438',
-  ink: '#F7F5FF',
-  inkSoft: '#D9D5E8',
-  muted: '#AAA5BA',
-  line: '#33405A',
-  primary: '#A99DFF',
-  primaryAction: '#6656D9',
+  background: '#070A16',
+  surface: '#10172A',
+  surfaceMuted: '#19223A',
+  ink: '#F6F7FF',
+  inkSoft: '#D8DEF4',
+  muted: '#A6B0CC',
+  line: '#2B3859',
+  primary: '#B7A8FF',
+  primaryAction: '#7058F5',
   onPrimaryAction: '#FFFFFF',
-  primaryDark: '#CEC8FF',
-  primarySoft: '#29264B',
-  brandSurface: '#211C4D',
-  teal: '#69DDD1',
-  tealSoft: '#153B3B',
-  saffron: '#F3C660',
-  saffronSoft: '#493A1D',
-  rose: '#FF91A8',
-  roseSoft: '#4B2432',
-  success: '#59D5B1',
+  primaryDark: '#E0DAFF',
+  primarySoft: '#27234D',
+  brandSurface: '#19143E',
+  teal: '#52E4D1',
+  tealSoft: '#123B3B',
+  saffron: '#FFD166',
+  saffronSoft: '#48371B',
+  rose: '#FF83A6',
+  roseSoft: '#492033',
+  success: '#4ADDB2',
   white: '#FFFFFF',
-  black: '#070A12',
-  onPrimaryMuted: '#D8D2FF',
-  goldInk: '#FFE39A',
-  goldBody: '#F8D985',
-  tealInk: '#B9F8F0',
-  borderGold: '#755E27',
-  borderRose: '#77384A',
-  pressBorder: '#7369A7',
-  secondaryBorder: '#5B5292',
-  overlayBorder: 'rgba(255,255,255,0.22)',
-  overlaySurface: 'rgba(255,255,255,0.10)',
-  imageScrim: 'rgba(4,7,15,0.16)',
-  imageScrimStrong: 'rgba(4,7,15,0.72)',
+  black: '#040610',
+  onPrimaryMuted: '#DED9FF',
+  goldInk: '#FFE7A3',
+  goldBody: '#EBCF80',
+  tealInk: '#B4FAF0',
+  borderGold: '#765D2D',
+  borderRose: '#74344D',
+  pressBorder: '#8172C5',
+  secondaryBorder: '#574AA0',
+  overlayBorder: 'rgba(255,255,255,0.15)',
+  overlaySurface: 'rgba(255,255,255,0.075)',
+  imageScrim: 'rgba(3,5,14,0.12)',
+  imageScrimStrong: 'rgba(3,5,14,0.68)',
+  ambientPrimary: 'rgba(112,88,245,0.18)',
+  ambientSecondary: 'rgba(82,228,209,0.10)',
+  ambientWarm: 'rgba(255,209,102,0.07)',
+  accentGlow: 'rgba(112,88,245,0.34)',
   shadow: '#000000',
 };
 
@@ -189,13 +201,23 @@ export const type = {
 };
 
 export const createShadow = (colors: AppPalette) => Platform.OS === 'web'
-  ? { boxShadow: colors === darkPalette ? '0 12px 24px rgba(0,0,0,0.28)' : '0 12px 24px rgba(47,38,122,0.09)' }
+  ? { boxShadow: colors === darkPalette ? '0 14px 34px rgba(0,0,0,0.34), 0 1px 0 rgba(255,255,255,0.035)' : '0 12px 24px rgba(47,38,122,0.09)' }
   : {
       shadowColor: colors.shadow,
-      shadowOffset: { width: 0, height: 12 },
-      shadowOpacity: colors === darkPalette ? 0.28 : 0.09,
-      shadowRadius: 24,
-      elevation: 5,
+      shadowOffset: { width: 0, height: 14 },
+      shadowOpacity: colors === darkPalette ? 0.34 : 0.09,
+      shadowRadius: colors === darkPalette ? 28 : 24,
+      elevation: colors === darkPalette ? 7 : 5,
+    };
+
+export const createAccentGlow = (colors: AppPalette) => Platform.OS === 'web'
+  ? { boxShadow: `0 10px 28px ${colors.accentGlow}` }
+  : {
+      shadowColor: colors.primaryAction,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: colors === darkPalette ? 0.34 : 0.14,
+      shadowRadius: 18,
+      elevation: colors === darkPalette ? 6 : 3,
     };
 
 export const shadow = createShadow(lightPalette);

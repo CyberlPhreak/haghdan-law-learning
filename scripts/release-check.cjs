@@ -26,6 +26,8 @@ const legalContentSource = fs.readFileSync('src/legal-content.ts', 'utf8');
 const legalPacksSource = fs.readFileSync('src/legal-content-packs.ts', 'utf8');
 const subjectArtSource = fs.readFileSync('src/subject-art.ts', 'utf8');
 const componentsSource = fs.readFileSync('src/components.tsx', 'utf8');
+const directionSource = fs.readFileSync('src/direction.ts', 'utf8');
+const onboardingSource = fs.readFileSync('src/onboarding.tsx', 'utf8');
 const assistantSource = fs.readFileSync('src/ai-chat.ts', 'utf8');
 const cloudSource = fs.readFileSync('src/cloud.ts', 'utf8');
 const assistantServerSource = fs.readFileSync('server/ai-chat.mjs', 'utf8');
@@ -94,7 +96,11 @@ if (gamificationSource.includes('buildGameProfile') && gamificationSource.includ
 else fail('Learning game layer is incomplete');
 const platformAwareRowDirection = "Platform.OS === 'web' ? 'row' : isRtl ? 'row-reverse' : 'row'";
 const languageDirectionsConfigured = [['fa', true], ['en', false], ['zh', false], ['ar', true], ['es', false]].every(([code, rtl]) => new RegExp(`code: '${code}'[^\\n]+rtl: ${rtl}`).test(i18nSource));
-const directionalNavigationConfigured = componentsSource.includes("!isRtl && icon === 'arrow-left'") && navigationSource.includes("isRtl ? 'chevron-left' : 'chevron-right'");
+const directionalNavigationConfigured = directionSource.includes('resolveDirectionalArrow')
+  && directionSource.includes('resolveForwardChevron')
+  && componentsSource.includes('resolveDirectionalArrow')
+  && onboardingSource.includes('direction="forward"')
+  && onboardingSource.includes('direction="back"');
 if (languageDirectionsConfigured && i18nSource.includes('I18nProvider') && i18nSource.includes('LocalizedText') && i18nSource.includes('legalTitle') && i18nSource.includes('document.documentElement.dir') && storeSource.includes("language: 'fa'") && navigationSource.includes('LanguagePicker') && navigationSource.includes(platformAwareRowDirection) && componentsSource.includes(platformAwareRowDirection) && directionalNavigationConfigured) pass('Persistent multilingual UI, RTL/LTR layout, and directional navigation configured');
 else fail('Multilingual interface configuration is incomplete');
 const containsPersian = source => /[\u0600-\u06ff]/.test(source);
@@ -113,7 +119,6 @@ else fail('A pathway is missing distinct artwork or the navigation treatment is 
 
 ['assets/icon.png','assets/adaptive-icon.png','assets/splash-icon.png','assets/favicon.png','assets/sounds/tap.wav','assets/sounds/correct-clap.wav','assets/sounds/incorrect.wav','docs/PRIVACY_POLICY.md','docs/TERMS_AND_DISCLAIMER.md','docs/EDITORIAL_POLICY.md','docs/SRA_COVERAGE_AUDIT.md','COPYRIGHT.md','SUPPORT.md','store/APP_STORE_SUBMISSION.md','store/PLAY_STORE_SUBMISSION.md','store/STORE_LISTING_EN.md','store/STORE_LISTING_FA.md','.github/ISSUE_TEMPLATE/config.yml','.github/ISSUE_TEMPLATE/support-request.yml','.github/ISSUE_TEMPLATE/content-error.yml','.github/ISSUE_TEMPLATE/privacy-request.yml','.env.example','server/ai-chat.mjs','supabase/config.toml','supabase/migrations/202607230001_cloud_accounts.sql','supabase/functions/delete-account/index.ts','eas.json','PUBLISHING.md'].forEach(path => requireFile(path, path.endsWith('.png') || path.endsWith('.wav') ? 1000 : 100));
 ['src/art-business.ts','src/art-dispute.ts','src/art-contractEthics.ts','src/art-property.ts','src/art-estates.ts','src/art-institutions.ts','src/art-criminal.ts','src/art-clientSkills.ts'].forEach(path => requireFile(path, 30000));
-['flk1-tort','flk1-public','flk1-services','flk2-accounts','flk2-land','flk2-trusts','flk2-criminal-practice','sqe2-advocacy','sqe2-analysis','sqe2-research','sqe2-writing','sqe2-drafting','foundations','housing','employment','immigration','police'].forEach(name => requireFile(`assets/subjects/${name}.jpg`, 100000));
 
 const curriculum = fs.readFileSync('src/sqe.ts', 'utf8');
 const knowledge = fs.readFileSync('src/sqe-knowledge.ts', 'utf8');

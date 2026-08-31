@@ -42,8 +42,9 @@ export type ThemeMode = 'system' | 'light' | 'dark';
 export type LearnerState = {
   hydrated: boolean;
   onboarded: boolean;
+  tutorialComplete: boolean;
   authenticated: boolean;
-  accountMode: 'local' | 'cloud';
+  accountMode: 'local' | 'cloud' | 'guest';
   userId: string;
   email: string;
   name: string;
@@ -64,10 +65,11 @@ export type LearnerState = {
   soundEffectsEnabled: boolean;
   persianFirst: boolean;
   themeMode: ThemeMode;
+  examDates: { FLK1: string; FLK2: string };
   testHistory: TestAttempt[];
 };
 
-type SettingsPatch = Partial<Pick<LearnerState, 'name' | 'dailyGoal' | 'audioEnabled' | 'soundEffectsEnabled' | 'persianFirst' | 'themeMode' | 'language'>>;
+type SettingsPatch = Partial<Pick<LearnerState, 'name' | 'dailyGoal' | 'audioEnabled' | 'soundEffectsEnabled' | 'persianFirst' | 'themeMode' | 'language' | 'examDates'>>;
 
 type StoreValue = {
   state: LearnerState;
@@ -78,6 +80,9 @@ type StoreValue = {
   resendVerification: (email: string) => Promise<AuthResult>;
   sendPasswordReset: (email: string) => Promise<AuthResult>;
   updatePassword: (password: string) => Promise<AuthResult>;
+  startGuest: () => void;
+  completeTutorial: () => void;
+  restartTutorial: () => void;
   signOut: () => Promise<void>;
   completeLesson: (lessonId: string, score: number, questionIds: string[], missedQuestionIds: string[]) => void;
   reviewAnswer: (questionId: string, correct: boolean) => void;
@@ -105,6 +110,7 @@ const STORAGE_KEY = '@haghdan/learner-v1';
 const initialState: LearnerState = {
   hydrated: false,
   onboarded: false,
+  tutorialComplete: false,
   authenticated: false,
   accountMode: 'local',
   userId: '',
@@ -127,6 +133,7 @@ const initialState: LearnerState = {
   soundEffectsEnabled: true,
   persianFirst: true,
   themeMode: 'system',
+  examDates: { FLK1: '', FLK2: '' },
   testHistory: [],
 };
 
@@ -255,9 +262,11 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
           hydrated: true,
         };
         if (typeof saved.xp !== 'number') restored.xp = calculateLegacyXp(restored);
-        restored.authenticated = cloudConfigured
-          ? false
-          : Boolean(restored.authenticated && restored.username && restored.pinHash && restored.pinSalt);
+        restored.authenticated = restored.accountMode === 'guest'
+          ? Boolean(restored.authenticated)
+          : cloudConfigured
+            ? false
+            : Boolean(restored.authenticated && restored.username && restored.pinHash && restored.pinSalt);
         setState(restored);
       })
       .catch(() => {
@@ -282,7 +291,7 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
       if (!session) {
         setCloudUser(null);
-        setState((current) => ({ ...current, authenticated: false }));
+        setState((current) => ({ ...current, authenticated: current.accountMode === 'guest' ? current.authenticated : false }));
         setCloud((current) => ({
           ...current,
           checking: false,
@@ -511,7 +520,48 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
     return result;
   }, []);
 
+  const startGuest = useCallback(() => {
+    setState((current) => ({
+      ...current,
+      onboarded: true,
+      authenticated: true,
+      accountMode: 'guest',
+      userId: '',
+      email: '',
+      name: current.name || 'Guest',
+      username: current.username || 'guest',
+      pinHash: '',
+      pinSalt: '',
+      termsAcceptedAt: current.termsAcceptedAt || new Date().toISOString(),
+    }));
+  }, []);
+
+  const completeTutorial = useCallback(() => {
+    setState((current) => ({ ...current, tutorialComplete: true }));
+  }, []);
+
+  const restartTutorial = useCallback(() => {
+    setState((current) => ({ ...current, tutorialComplete: false }));
+  }, []);
+
   const signOut = useCallback(async () => {
+    if (stateRef.current.accountMode === 'guest') {
+      const current = stateRef.current;
+      const exited = {
+        ...current,
+        authenticated: false,
+        accountMode: 'local' as const,
+        userId: '',
+        email: '',
+        name: '',
+        username: '',
+        pinHash: '',
+        pinSalt: '',
+      };
+      stateRef.current = exited;
+      setState(exited);
+      return;
+    }
     if (!supabase) {
       const signedOut = { ...stateRef.current, authenticated: false };
       stateRef.current = signedOut;
@@ -662,6 +712,9 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
       resendVerification,
       sendPasswordReset,
       updatePassword,
+      startGuest,
+      completeTutorial,
+      restartTutorial,
       signOut,
       completeLesson,
       reviewAnswer,
@@ -673,7 +726,7 @@ export function LearnerProvider({ children }: { children: ReactNode }) {
       streak,
       completedToday,
     }),
-    [state, cloud, registerAccount, authenticate, signInWithGoogle, resendVerification, sendPasswordReset, updatePassword, signOut, completeLesson, reviewAnswer, toggleSaved, updateSettings, recordTestAttempt, resetProgress, deleteAccount, streak, completedToday],
+    [state, cloud, registerAccount, authenticate, signInWithGoogle, resendVerification, sendPasswordReset, updatePassword, startGuest, completeTutorial, restartTutorial, signOut, completeLesson, reviewAnswer, toggleSaved, updateSettings, recordTestAttempt, resetProgress, deleteAccount, streak, completedToday],
   );
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

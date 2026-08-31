@@ -6,7 +6,7 @@ A Persian-first, offline-capable learning and practice app for the law of Englan
 
 - 14 SQE1 subject pathways across FLK1 and FLK2
 - All six SQE2 assessed legal skills
-- 137 structured SQE learning and timed-station units plus 15 everyday-law lessons
+- 137 structured SQE learning units and original timed-practice simulations plus 15 everyday-law lessons
 - Five-part SQE lessons: overview, core knowledge, application method, guided scenario and exam clinic
 - Bilingual English/Persian legal terminology, examples and checklists
 - Six knowledge checks inside each FLK lesson and four rubric checks inside each SQE2 lesson
@@ -14,7 +14,7 @@ A Persian-first, offline-capable learning and practice app for the law of Englan
 - Quick 10-question, diagnostic 30-question and timed 90-question sessions
 - Full 180-question FLK mock split into two independent 90-question, 153-minute sessions
 - Annex 4 blueprint-balanced mock selection, with Solicitors Accounts integrated into Property and Wills contexts
-- 24 timed SQE2 station packs across all official skills and valid practice-area combinations
+- 24 original timed SQE2 practice simulations across all official skills and valid practice-area combinations; the live SQE2 assessment itself contains 16 assessments (4 oral and 12 written)
 - Subject-specific 20-question practice from every FLK pathway
 - Persistent results, bookmarks, streaks, daily goals and spaced review
 - Persistent XP and seven learning levels, three daily missions, eight achievement badges, answer chains and finite reward celebrations

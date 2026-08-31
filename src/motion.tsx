@@ -1,7 +1,7 @@
 import { AccessibilityInfo, Animated, Easing, Platform, type StyleProp, type ViewProps, type ViewStyle } from 'react-native';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
-export const motion = { quick: 180, standard: 280, relaxed: 360, stagger: 45 } as const;
+export const motion = { quick: 160, standard: 220, relaxed: 280, stagger: 35 } as const;
 const useNativeDriver = Platform.OS !== 'web';
 
 export function useReducedMotion() {

@@ -5,6 +5,11 @@ import type { ThemeMode } from './store';
 
 export type AppPalette = {
   background: string;
+  sectionHome: string;
+  sectionLearn: string;
+  sectionReview: string;
+  sectionPractice: string;
+  sectionProfile: string;
   surface: string;
   surfaceMuted: string;
   ink: string;
@@ -46,19 +51,24 @@ export type AppPalette = {
 };
 
 export const lightPalette: AppPalette = {
-  background: '#F7F6FC',
-  surface: '#FFFFFF',
-  surfaceMuted: '#F0EEF9',
-  ink: '#19172B',
-  inkSoft: '#3E3A55',
-  muted: '#716D84',
-  line: '#E3E0EE',
-  primary: '#4B3DB8',
-  primaryAction: '#4B3DB8',
+  background: '#F4F5F9',
+  sectionHome: '#F4F5F9',
+  sectionLearn: '#F0EFF9',
+  sectionReview: '#ECF6F3',
+  sectionPractice: '#EDF3FA',
+  sectionProfile: '#F7F0EA',
+  surface: '#FFFEFC',
+  surfaceMuted: '#F0F2F8',
+  ink: '#171A2B',
+  inkSoft: '#3C415A',
+  muted: '#737A91',
+  line: '#E0E4ED',
+  primary: '#453FA4',
+  primaryAction: '#5148D2',
   onPrimaryAction: '#FFFFFF',
-  primaryDark: '#2F267A',
-  primarySoft: '#ECE9FF',
-  brandSurface: '#2F267A',
+  primaryDark: '#302A7A',
+  primarySoft: '#ECEBFB',
+  brandSurface: '#29245F',
   teal: '#087F78',
   tealSoft: '#DDF4F0',
   saffron: '#E2A11D',
@@ -74,33 +84,38 @@ export const lightPalette: AppPalette = {
   tealInk: '#195C57',
   borderGold: '#E9CC80',
   borderRose: '#F1C4D0',
-  pressBorder: '#CFC9ED',
-  secondaryBorder: '#D6D0FF',
+  pressBorder: '#C9C8E9',
+  secondaryBorder: '#D3D0F3',
   overlayBorder: 'rgba(255,255,255,0.18)',
   overlaySurface: 'rgba(255,255,255,0.08)',
   imageScrim: 'rgba(255,255,255,0.08)',
   imageScrimStrong: 'rgba(8,12,28,0.70)',
-  ambientPrimary: 'rgba(75,61,184,0.05)',
+  ambientPrimary: 'rgba(81,72,210,0.045)',
   ambientSecondary: 'rgba(8,127,120,0.04)',
   ambientWarm: 'rgba(226,161,29,0.035)',
-  accentGlow: 'rgba(75,61,184,0.14)',
-  shadow: '#2F267A',
+  accentGlow: 'rgba(81,72,210,0.14)',
+  shadow: '#25215A',
 };
 
 export const darkPalette: AppPalette = {
-  background: '#070A16',
-  surface: '#10172A',
-  surfaceMuted: '#19223A',
+  background: '#0B1020',
+  sectionHome: '#0B1020',
+  sectionLearn: '#17112D',
+  sectionReview: '#082224',
+  sectionPractice: '#091B33',
+  sectionProfile: '#24151F',
+  surface: '#121A2D',
+  surfaceMuted: '#19243A',
   ink: '#F6F7FF',
   inkSoft: '#D8DEF4',
   muted: '#A6B0CC',
-  line: '#2B3859',
+  line: '#293653',
   primary: '#B7A8FF',
   primaryAction: '#7058F5',
   onPrimaryAction: '#FFFFFF',
   primaryDark: '#E0DAFF',
-  primarySoft: '#27234D',
-  brandSurface: '#19143E',
+  primarySoft: '#29264F',
+  brandSurface: '#211C4A',
   teal: '#52E4D1',
   tealSoft: '#123B3B',
   saffron: '#FFD166',

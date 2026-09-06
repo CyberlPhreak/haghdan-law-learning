@@ -1,7 +1,7 @@
 import Feather from '@expo/vector-icons/Feather';
 import * as Haptics from 'expo-haptics';
 import { DefaultTheme, NavigationContainer, useNavigation, type CompositeNavigationProp } from '@react-navigation/native';
-import { BottomTabBar, createBottomTabNavigator, type BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { BottomTabBar, createBottomTabNavigator, type BottomTabBarProps, type BottomTabNavigationProp, type BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator, type NativeStackNavigationProp, type NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
@@ -42,7 +42,7 @@ import { createAccentGlow, createShadow, lightPalette, radius, space, themedAcce
 export type RootStackParamList = {
   Main: undefined;
   Pathway: { pathwayId: string };
-  Lesson: { lessonId: string };
+  Lesson: { lessonId: string; mode?: 'study' | 'practice' };
   Test: { stage: SqeStage; count: number; mode: TestMode; subjectId?: string };
   Insights: undefined;
   GameHub: undefined;
@@ -53,7 +53,7 @@ export type RootStackParamList = {
 
 type TabParams = {
   Home: undefined;
-  Learn: undefined;
+  Learn: { initialTrack?: SqeTrack } | undefined;
   Review: undefined;
   Practice: undefined;
   Profile: undefined;
@@ -114,9 +114,9 @@ function MainTabs() {
   const { width } = useWindowDimensions();
   const { playTap } = useSoundFeedback();
   const { t } = useI18n();
-  const desktop = width >= 980;
+  const desktop = width >= 1080;
   return (
-    <Tabs.Navigator tabBar={(props) => desktop ? <View style={s.tabsDesktopHost}><DesktopNavigationBackdrop /><BottomTabBar {...props} /><DesktopLibraryShortcut onOpenLibrary={() => props.navigation.navigate('Learn')} /></View> : <BottomTabBar {...props} />} screenListeners={{ tabPress: playTap }} screenOptions={({ route }) => ({
+    <Tabs.Navigator tabBar={(props) => desktop ? <DesktopTabBar {...props} /> : <BottomTabBar {...props} />} screenListeners={{ tabPress: playTap }} screenOptions={({ route }) => ({
       headerShown: false,
       tabBarPosition: desktop ? 'left' : 'bottom',
       tabBarActiveTintColor: palette.primary,
@@ -124,10 +124,10 @@ function MainTabs() {
       tabBarInactiveTintColor: palette.muted,
       tabBarHideOnKeyboard: true,
       animation: 'fade',
-      tabBarLabel: ({ focused }) => <Text numberOfLines={1} style={[s.navLabel, desktop && s.navLabelDesktop, focused && s.navLabelActive]}>{t(tabInfo[route.name].key)}</Text>,
+      tabBarLabel: ({ focused }) => <Text numberOfLines={1} style={[s.navLabel, focused && s.navLabelActive]}>{t(tabInfo[route.name].key)}</Text>,
       tabBarIcon: ({ focused }) => <NavigationIcon route={route.name} focused={focused} />,
-      tabBarStyle: desktop ? s.tabsDesktop : s.tabsMobile,
-      tabBarItemStyle: [s.tabItem, desktop && s.tabItemDesktop],
+      tabBarStyle: s.tabsMobile,
+      tabBarItemStyle: s.tabItem,
     })}>
       <Tabs.Screen name="Home" component={Home} />
       <Tabs.Screen name="Learn" component={Learn} />
@@ -148,26 +148,67 @@ function NavigationIcon({ route, focused }: { route: keyof TabParams; focused: b
   );
 }
 
-function DesktopNavigationBackdrop() {
-  return <View accessible={false} style={s.sidebarBackdrop}><View style={s.sidebarGlow} /></View>;
-}
-
-function DesktopLibraryShortcut({ onOpenLibrary }: { onOpenLibrary: () => void }) {
+function DesktopTabBar({ state: navigationState, descriptors, navigation }: BottomTabBarProps) {
   const { state } = useLearner();
   const { t, formatNumber } = useI18n();
+  const { height } = useWindowDimensions();
+  const compact = height < 840;
   const progress = Math.round((state.completedLessons.length / Math.max(1, lessons.length)) * 100);
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`${t('home.library')}. ${t('nav.learn')}`} onPress={onOpenLibrary} style={({ pressed }) => [s.sidebarArtworkButton, pressed && s.sidebarArtworkPressed]}>
-      <ImageBackground source={subjectArtFor('flk1-system')} resizeMode="cover" style={s.sidebarArtwork} imageStyle={s.sidebarArtworkImage} accessible={false} accessibilityIgnoresInvertColors>
-        <View style={s.sidebarArtworkScrim} />
-        <View style={s.sidebarArtworkContent}>
-          <View style={s.sidebarArtworkTop}><View style={s.sidebarArtworkIcon}><Feather name="compass" size={21} color={palette.saffron} /></View><DirectionalChevron size={18} color={palette.white} /></View>
-          <Text style={s.sidebarArtworkTitle}>{t('home.library')}</Text>
-          <Text style={s.sidebarArtworkMeta}>{t('home.libraryProgress', { done: formatNumber(state.completedLessons.length), total: formatNumber(lessons.length) })}</Text>
-          <View style={s.sidebarProgress}><ProgressBar value={progress} color={palette.saffron} trackColor={palette.overlayBorder} /></View>
+    <View style={[s.desktopNavShell, compact && s.desktopNavShellCompact]} accessibilityRole="tablist">
+      <View style={[s.desktopNavBrand, compact && s.desktopNavBrandCompact]}><Brand /></View>
+      <View style={[s.desktopPlanCard, compact && s.desktopPlanCardCompact]}>
+        <View style={s.desktopPlanTop}>
+          <View style={[s.desktopPlanIcon, compact && s.desktopPlanIconCompact]}><Feather name="award" size={compact ? 16 : 18} color={palette.goldInk} /></View>
+          <View style={s.desktopPlanBadge}><Text style={s.desktopPlanBadgeText}>SQE</Text></View>
         </View>
-      </ImageBackground>
-    </Pressable>
+        <Text style={s.desktopPlanTitle}>{t('learn.eyebrow')}</Text>
+        {compact ? null : <Text style={s.desktopPlanMeta}>FLK1 · FLK2 · SQE2</Text>}
+      </View>
+      <Text style={s.desktopNavSection}>{t('home.eyebrow')}</Text>
+      <View style={s.desktopNavList}>
+        {navigationState.routes.map((route, index) => {
+          const focused = navigationState.index === index;
+          const descriptor = descriptors[route.key];
+          const routeName = route.name as keyof TabParams;
+          const onPress = () => {
+            const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+            if (!focused && !event.defaultPrevented) navigation.navigate(route.name, route.params);
+          };
+          return (
+            <Pressable
+              key={route.key}
+              sound={false}
+              accessibilityRole="tab"
+              accessibilityLabel={descriptor?.options.tabBarAccessibilityLabel ?? t(tabInfo[routeName].key)}
+              accessibilityState={{ selected: focused }}
+              onPress={onPress}
+              style={({ pressed }) => [s.desktopNavItem, compact && s.desktopNavItemCompact, focused && s.desktopNavItemActive, pressed && s.desktopNavItemPressed]}
+            >
+              <View style={[s.desktopNavItemIcon, focused && s.desktopNavItemIconActive]}>
+                <Feather name={tabInfo[routeName].icon} size={19} color={focused ? palette.onPrimaryAction : palette.muted} />
+              </View>
+              <Text numberOfLines={1} style={[s.desktopNavItemText, focused && s.desktopNavItemTextActive]}>{t(tabInfo[routeName].key)}</Text>
+              {focused ? <View style={s.desktopNavMarker} /> : null}
+            </Pressable>
+          );
+        })}
+      </View>
+      <View style={s.desktopNavSpacer} />
+      <Pressable accessibilityRole="button" accessibilityLabel={`${t('home.library')}. ${t('nav.learn')}`} onPress={() => navigation.navigate('Learn')} style={({ pressed }) => [s.desktopLibraryCard, compact && s.desktopLibraryCardCompact, pressed && s.desktopLibraryCardPressed]}>
+        <View style={s.desktopLibraryTop}>
+          <View style={s.desktopLibraryIcon}><Feather name="book-open" size={20} color={palette.primary} /></View>
+          <DirectionalChevron size={18} color={palette.muted} />
+        </View>
+        <Text style={s.desktopLibraryTitle}>{t('home.library')}</Text>
+        <Text style={s.desktopLibraryMeta}>{t('home.libraryProgress', { done: formatNumber(state.completedLessons.length), total: formatNumber(lessons.length) })}</Text>
+        <View style={s.desktopLibraryProgress}><ProgressBar value={progress} color={palette.saffron} /></View>
+      </Pressable>
+      {compact ? null : <View style={s.desktopNavFooter}>
+        <Feather name="shield" size={14} color={palette.muted} />
+        <Text numberOfLines={2} style={s.desktopNavFooterText}>{t('notice.legal')}</Text>
+      </View>}
+    </View>
   );
 }
 
@@ -451,6 +492,107 @@ function FieldError({ message, centered = false }: { message?: string; centered?
 }
 
 function Home() {
+  const { width } = useWindowDimensions();
+  return width < 720 ? <MobileHome /> : <WorkspaceHome />;
+}
+
+function MobileHome() {
+  const nav = useRootNav();
+  const tabs = useNavigation<BottomTabNavigationProp<TabParams>>();
+  const { state, completedToday, streak } = useLearner();
+  const { t, formatNumber, legalTitle, language } = useI18n();
+  const next = lessons.find((item) => !state.completedLessons.includes(item.id)) ?? lessons[0]!;
+  const mastery = Math.round((state.completedLessons.length / Math.max(1, lessons.length)) * 100);
+  const learnerName = state.accountMode === 'guest' ? t('profile.guestName') : state.name;
+  return (
+    <Page tone="home">
+      <View style={s.mobileHome}>
+        <View style={s.mobileAppHeader}>
+          <Brand />
+          <Pressable accessibilityRole="button" accessibilityLabel={t('nav.profile')} onPress={() => tabs.navigate('Profile')} style={({ pressed }) => [s.mobileProfileButton, pressed && s.pressed]}>
+            <Feather name="user" size={22} color={palette.ink} />
+            <View style={s.mobileProfileStatus} />
+          </Pressable>
+        </View>
+        <View style={s.mobileGreeting}>
+          <Text style={s.mobileEyebrow}>{t('home.eyebrow')}</Text>
+          <Text role="heading" style={s.mobileTitle}>{t('home.greeting', { name: learnerName })}</Text>
+          <Text style={s.mobileSubtitle}>{t('home.subtitle')}</Text>
+        </View>
+        <View style={s.mobileMomentumCard}>
+          <View style={s.mobileMomentumTop}>
+            <View style={s.mobileMomentumCopy}>
+              <Text style={s.mobileMomentumLabel}>{t('home.dailyGoal')}</Text>
+              <Text style={s.mobileMomentumValue}>{formatNumber(completedToday)}/{formatNumber(state.dailyGoal)}</Text>
+            </View>
+            <View style={s.mobileMomentumSignal}>
+              <Feather name="activity" size={18} color={palette.saffron} />
+              <Text style={s.mobileMomentumSignalValue}>{formatNumber(streak)}</Text>
+              <Text style={s.mobileMomentumSignalText}>{t('home.streak')}</Text>
+            </View>
+          </View>
+          <ProgressBar value={(completedToday / Math.max(1, state.dailyGoal)) * 100} color={palette.saffron} trackColor={palette.overlayBorder} />
+          <Text style={s.mobileMomentumMeta}>{formatNumber(mastery)}% · {t('home.mastery')}</Text>
+        </View>
+        <View style={s.mobileSectionHeader}>
+          <Text style={s.mobileSectionTitle}>{t('home.library')}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={t('nav.learn')} onPress={() => tabs.navigate('Learn')} style={({ pressed }) => [s.mobileSectionLink, pressed && s.pressed]}>
+            <Text style={s.mobileSectionLinkText}>{t('nav.learn')}</Text><DirectionalChevron size={17} color={palette.primary} />
+          </Pressable>
+        </View>
+        <View style={s.mobileStageList}>
+          <MobileStageCard stage="FLK1" onPress={() => tabs.navigate('Learn', { initialTrack: 'FLK1' })} />
+          <MobileStageCard stage="FLK2" onPress={() => tabs.navigate('Learn', { initialTrack: 'FLK2' })} />
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel={`${t('home.startLesson')}: ${legalTitle(next.title, next.englishTitle)}`} onPress={() => nav.navigate('Lesson', { lessonId: next.id })} style={({ pressed }) => [s.mobileQuickSession, pressed && s.mobileQuickSessionPressed]}>
+          <View style={s.mobileQuickIcon}><Feather name="play" size={23} color={palette.white} /></View>
+          <View style={s.mobileQuickCopy}>
+            <Text style={s.mobileQuickLabel}>{t('home.startLesson')}</Text>
+            <Text numberOfLines={2} style={s.mobileQuickTitle}>{legalTitle(next.title, next.englishTitle)}</Text>
+            <Text style={s.mobileQuickMeta}>{t('home.minutes', { count: formatNumber(next.duration) })} · {t('home.sections', { count: formatNumber(next.sections.length) })}</Text>
+          </View>
+          <DirectionalChevron size={22} color={palette.white} />
+        </Pressable>
+        <View style={s.mobileActionList}>
+          <MobileActionRow icon="edit-3" title={t('practice.mock')} subtitle={t('practice.title')} onPress={() => tabs.navigate('Practice')} />
+          <MobileActionRow icon="bar-chart-2" title={t('insights.view')} subtitle={t('insights.readiness', { count: formatNumber(mastery) })} onPress={() => nav.navigate('Insights')} />
+          <MobileActionRow icon="message-circle" title={t('home.assistant')} subtitle={t('home.assistantBody')} onPress={() => nav.navigate('AIChat')} />
+        </View>
+        {language !== 'fa' ? <View style={s.mobileTranslationNote}><Feather name="globe" size={16} color={palette.primary} /><Text style={s.mobileTranslationText}>{t('learn.translationNote', { language: languageOptions.find((item) => item.code === language)?.nativeName ?? language })}</Text></View> : null}
+        <Notice />
+      </View>
+    </Page>
+  );
+}
+
+function MobileStageCard({ stage, onPress }: { stage: 'FLK1' | 'FLK2'; onPress: () => void }) {
+  const { state } = useLearner();
+  const { t, formatNumber } = useI18n();
+  const subjects = stageSubjects(stage);
+  const lessonIds = subjects.flatMap((item) => item.lessonIds);
+  const completed = lessonIds.filter((id) => state.completedLessons.includes(id)).length;
+  const percent = Math.round((completed / Math.max(1, lessonIds.length)) * 100);
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={`${stage}, ${t('learn.units', { sections: formatNumber(subjects.length), units: formatNumber(lessonIds.length) })}`} onPress={onPress} style={({ pressed }) => [s.mobileStageCard, pressed && s.mobileStageCardPressed]}>
+      <View style={s.mobileStageTop}><Text style={s.mobileStageName}>{stage}</Text><View style={s.mobileStageArrow}><DirectionalChevron size={20} color={palette.primary} /></View></View>
+      <Text style={s.mobileStageUnits}>{t('learn.units', { sections: formatNumber(subjects.length), units: formatNumber(lessonIds.length) })}</Text>
+      <View style={s.mobileStageProgressRow}><Text style={s.mobileStageProgressText}>{formatNumber(completed)} / {formatNumber(lessonIds.length)}</Text><Text style={s.mobileStagePercent}>{formatNumber(percent)}%</Text></View>
+      <ProgressBar value={percent} color={palette.primaryAction} />
+    </Pressable>
+  );
+}
+
+function MobileActionRow({ icon, title, subtitle, onPress }: { icon: IconName; title: string; subtitle: string; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={title} onPress={onPress} style={({ pressed }) => [s.mobileActionRow, pressed && s.mobileActionRowPressed]}>
+      <View style={s.mobileActionIcon}><Feather name={icon} size={20} color={palette.primary} /></View>
+      <View style={s.mobileActionCopy}><Text style={s.mobileActionTitle}>{title}</Text><Text numberOfLines={2} style={s.mobileActionSubtitle}>{subtitle}</Text></View>
+      <DirectionalChevron size={20} color={palette.muted} />
+    </Pressable>
+  );
+}
+
+function WorkspaceHome() {
   const nav = useRootNav();
   const { state, streak, completedToday } = useLearner();
   const { t, formatNumber, legalTitle, secondaryLegalTitle, language, locale } = useI18n();
@@ -460,7 +602,7 @@ function Home() {
   const mastery = Math.round((state.completedLessons.length / lessons.length) * 100);
   const due = state.reviewQueue.filter((item) => new Date(item.dueAt) <= new Date()).length;
   return (
-    <Page>
+    <Page tone="home">
       <Header eyebrow={t('home.eyebrow')} title={t('home.greeting', { name: state.accountMode === 'guest' ? t('profile.guestName') : state.name })} subtitle={t('home.subtitle')} />
       <View style={s.hero}>
         <View style={s.heroGlow} />
@@ -584,11 +726,13 @@ function AchievementCard({ achievement, delay }: { achievement: Achievement; del
   return <MotionView style={[s.achievementCard, achievement.unlocked && s.achievementUnlocked]} delay={delay} distance={8} accessible accessibilityLabel={`${title}, ${achievement.unlocked ? t('game.unlocked') : t('game.locked')}`}><View style={[s.achievementIcon, achievement.unlocked && s.achievementIconUnlocked]}><Feather name={achievement.unlocked ? achievement.icon : 'lock'} size={23} color={achievement.unlocked ? palette.goldInk : palette.muted} /></View><Text style={[s.achievementTitle, !achievement.unlocked && s.achievementTitleLocked]}>{title}</Text><Text style={s.achievementText}>{description}</Text></MotionView>;
 }
 
-function Learn() {
+type LearnScreenProps = BottomTabScreenProps<TabParams, 'Learn'>;
+function Learn({ route }: LearnScreenProps) {
   const nav = useRootNav();
   const { state } = useLearner();
   const { t, formatNumber, isRtl, language } = useI18n();
-  const [track, setTrack] = useState<SqeTrack>('FLK1');
+  const requestedTrack = route.params?.initialTrack;
+  const [track, setTrack] = useState<SqeTrack>(requestedTrack ?? 'FLK1');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
   const pageSize = 6;
@@ -602,8 +746,14 @@ function Learn() {
   const pageCount = Math.max(1, Math.ceil(visible.length / pageSize));
   const visiblePage = visible.slice(page * pageSize, (page + 1) * pageSize);
   const unitCount = source.reduce((sum, item) => sum + item.lessonIds.length, 0);
+  useEffect(() => {
+    if (!requestedTrack) return;
+    setTrack(requestedTrack);
+    setQuery('');
+    setPage(0);
+  }, [requestedTrack]);
   return (
-    <Page>
+    <Page tone="learn">
       <Header eyebrow={t('learn.eyebrow')} title={t('learn.title')} subtitle={t('learn.subtitle')} />
       <View style={s.specBanner}>
         <View style={s.specIcon}><Feather name="award" size={24} color={palette.white} /></View>
@@ -635,6 +785,18 @@ function PathwayScreen({ route, navigation }: PathProps) {
   const percent = Math.round((complete / item.lessonIds.length) * 100);
   const softColor = themedSoftColor(item.color, item.softColor, darkMode);
   const accentColor = themedAccentColor(item.color, darkMode);
+  const firstLessonId = item.lessonIds.find((id) => !state.completedLessons.includes(id)) ?? item.lessonIds[0];
+  const totalMinutes = item.lessonIds.reduce((sum, id) => sum + (lessonById[id]?.duration ?? 0), 0);
+  const lessonQuestionCount = item.lessonIds.reduce((sum, id) => sum + (lessonById[id]?.quiz.length ?? 0), 0);
+  const hasSubjectTest = item.track === 'FLK1' || item.track === 'FLK2';
+  const practiceQuestionCount = hasSubjectTest ? 20 : lessonQuestionCount;
+  const openPractice = () => {
+    if (hasSubjectTest) {
+      navigation.navigate('Test', { stage: item.track as SqeStage, count: 20, mode: 'diagnostic', subjectId: item.id });
+    } else if (firstLessonId) {
+      navigation.navigate('Lesson', { lessonId: firstLessonId, mode: 'practice' });
+    }
+  };
   return (
     <SafeAreaView style={s.safe}><ScrollView contentContainerStyle={s.detailPage}>
       <TopBar onBack={navigation.goBack} />
@@ -643,12 +805,24 @@ function PathwayScreen({ route, navigation }: PathProps) {
         <Text style={s.pathHeroTitle}>{legalTitle(item.title, item.englishTitle)}</Text>{secondaryLegalTitle(item.title, item.englishTitle) ? <Text style={[s.english, { color: accentColor }]}>{secondaryLegalTitle(item.title, item.englishTitle)}</Text> : null}<Text style={s.body}>{language === 'fa' ? item.description : t('learn.pathwayDescription')}</Text>
         <View style={s.between}><Text style={s.smallStrong}>{formatNumber(complete)}/{formatNumber(item.lessonIds.length)} {t('common.lessons')}</Text><Text style={s.smallStrong}>{formatNumber(percent)}%</Text></View>
         <ProgressBar value={percent} color={accentColor} trackColor={darkMode ? palette.line : palette.white} />
-        {item.track === 'FLK1' || item.track === 'FLK2' ? <ActionButton label={t('practice.subject', { subject: legalTitle(item.title, item.englishTitle) })} icon="edit-3" variant="secondary" onPress={() => navigation.navigate('Test', { stage: item.track as SqeStage, count: 20, mode: 'diagnostic', subjectId: item.id })} /> : null}
       </View>
+      <View style={s.pathModeGrid}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`${t('learn.studyMaterials')}. ${t('learn.studyMaterialsHint', { count: formatNumber(item.lessonIds.length), minutes: formatNumber(totalMinutes) })}`} disabled={!firstLessonId} onPress={() => firstLessonId && navigation.navigate('Lesson', { lessonId: firstLessonId, mode: 'study' })} style={({ pressed }) => [s.pathModeCard, s.pathModeStudy, pressed && s.pathModeCardPressed]}>
+          <View style={[s.pathModeIcon, s.pathModeStudyIcon]}><Feather name="book-open" size={24} color={palette.primary} /></View>
+          <View style={s.flexEnd}><Text style={s.pathModeTitle}>{t('learn.studyMaterials')}</Text><Text style={s.pathModeHint}>{t('learn.studyMaterialsHint', { count: formatNumber(item.lessonIds.length), minutes: formatNumber(totalMinutes) })}</Text></View>
+          <View style={s.pathModeAction}><Text style={s.pathModeActionText}>{t('home.startLesson')}</Text><DirectionalChevron size={18} color={palette.primary} /></View>
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel={`${t('learn.subjectTest')}. ${t('learn.subjectTestHint', { count: formatNumber(practiceQuestionCount) })}`} onPress={openPractice} style={({ pressed }) => [s.pathModeCard, s.pathModePractice, pressed && s.pathModeCardPressed]}>
+          <View style={[s.pathModeIcon, s.pathModePracticeIcon]}><Feather name="edit-3" size={24} color={palette.teal} /></View>
+          <View style={s.flexEnd}><Text style={s.pathModeTitle}>{t('learn.subjectTest')}</Text><Text style={s.pathModeHint}>{t('learn.subjectTestHint', { count: formatNumber(practiceQuestionCount) })}</Text></View>
+          <View style={s.pathModeAction}><Text style={[s.pathModeActionText, { color: palette.teal }]}>{t('practice.quick')}</Text><DirectionalChevron size={18} color={palette.teal} /></View>
+        </Pressable>
+      </View>
+      <SectionTitle title={t('learn.studyMaterials')} />
       <View style={s.list}>{item.lessonIds.map((id, index) => {
         const lesson = lessonById[id]!;
         const done = state.completedLessons.includes(id);
-        return <Pressable key={id} accessibilityRole="button" onPress={() => navigation.navigate('Lesson', { lessonId: id })} style={({ pressed }) => [s.lessonRow, pressed && s.pressed]}>
+        return <Pressable key={id} accessibilityRole="button" onPress={() => navigation.navigate('Lesson', { lessonId: id, mode: 'study' })} style={({ pressed }) => [s.lessonRow, pressed && s.pressed]}>
           <View style={[s.lessonNumber, done && s.done]}>{done ? <Feather name="check" size={18} color={palette.white} /> : <Text style={s.number}>{index + 1}</Text>}</View>
           <View style={s.flexEnd}><Text style={s.cardTitle}>{legalTitle(lesson.title, lesson.englishTitle)}</Text>{secondaryLegalTitle(lesson.title, lesson.englishTitle) ? <Text style={s.englishSmall}>{secondaryLegalTitle(lesson.title, lesson.englishTitle)}</Text> : null}<View style={s.metaRow}><Meta icon="clock" text={t('home.minutes', { count: formatNumber(lesson.duration) })} />{state.quizScores[id] !== undefined ? <Meta icon="award" text={formatNumber(state.quizScores[id]) + '%'} /> : null}</View></View>
           <DirectionalChevron size={22} color={palette.muted} />
@@ -660,13 +834,18 @@ function PathwayScreen({ route, navigation }: PathProps) {
 }
 
 type LessonProps = NativeStackScreenProps<RootStackParamList, 'Lesson'>;
+type LessonMode = 'study' | 'practice';
 function LessonScreen({ route, navigation }: LessonProps) {
   const sourceItem = lessonById[route.params.lessonId];
   const { state, completeLesson, toggleSaved } = useLearner();
   const { t, formatNumber, legalTitle, language } = useI18n();
+  const { width } = useWindowDimensions();
+  const compact = width < 600;
   const item = useMemo(() => sourceItem ? localizeLesson(sourceItem, language) : undefined, [sourceItem, language]);
+  const [mode, setMode] = useState<LessonMode>(route.params.mode ?? 'study');
   const [section, setSection] = useState(0);
-  const [quiz, setQuiz] = useState(-1);
+  const [studyComplete, setStudyComplete] = useState(false);
+  const [quiz, setQuiz] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [answers, setAnswers] = useState<Record<string, number>>({});
@@ -676,16 +855,21 @@ function LessonScreen({ route, navigation }: LessonProps) {
   const [earnedXp, setEarnedXp] = useState(0);
   const { playCorrect, playIncorrect, playMilestone } = useSoundFeedback();
   if (!item) return null;
-  const total = item.sections.length + item.quiz.length;
-  const step = quiz < 0 ? section : item.sections.length + quiz;
+  const total = mode === 'study' ? item.sections.length : item.quiz.length;
+  const step = mode === 'study' ? section : quiz;
   const progress = finished ? 100 : Math.round(((step + 1) / total) * 100);
-  const question = quiz >= 0 ? item.quiz[quiz] : undefined;
+  const question = mode === 'practice' ? item.quiz[quiz] : undefined;
   const saved = state.savedLessons.includes(item.id);
 
+  const selectMode = (nextMode: LessonMode) => {
+    setMode(nextMode);
+    navigation.setParams({ mode: nextMode });
+  };
+
   const advance = () => {
-    if (quiz < 0) {
+    if (mode === 'study') {
       if (section < item.sections.length - 1) setSection(section + 1);
-      else setQuiz(0);
+      else setStudyComplete(true);
       return;
     }
     if (!question || selected === null) return;
@@ -729,32 +913,47 @@ function LessonScreen({ route, navigation }: LessonProps) {
   return (
     <SafeAreaView style={s.safe}>
       <View style={s.lessonTop}><RoundIcon icon="x" label={t('lesson.close')} onPress={navigation.goBack} /><View style={s.flex}><ProgressBar value={progress} /></View><RoundIcon icon="bookmark" label={t('lesson.save')} active={saved} onPress={() => toggleSaved(item.id)} /></View>
-      <ScrollView contentContainerStyle={s.lessonPage}>
-        <MotionView style={s.lessonMotion} replayKey={`${section}-${quiz}-${finished}`} distance={10}>
-        {finished ? <View style={s.result}><CelebrationBurst icon="award" tone={result >= 70 ? 'success' : 'gold'} /><Text style={s.eyebrow}>{t('lesson.complete')}</Text><Text style={s.pathHeroTitle}>{legalTitle(item.title, item.englishTitle)}</Text><Text style={s.score}>{formatNumber(result)}%</Text><View style={s.rewardRow}><RewardChip icon="zap" value={`+${formatNumber(earnedXp)} XP`} label="XP" /><RewardChip icon="activity" value={formatNumber(bestCombo)} label={t('lesson.chain', { count: formatNumber(bestCombo) })} /></View><Text style={s.centerBody}>{t('lesson.progressSaved')}</Text><ActionButton label={t('lesson.backPath')} direction="back" onPress={navigation.goBack} fullWidth /></View>
-        : quiz < 0 ? <LessonSection item={item} index={section} />
+      <LessonModeTabs mode={mode} studyCount={item.sections.length} practiceCount={item.quiz.length} onChange={selectMode} />
+      <ScrollView contentContainerStyle={[s.lessonPage, compact && s.lessonPageCompact]}>
+        <MotionView style={s.lessonMotion} replayKey={`${mode}-${section}-${quiz}-${finished}-${studyComplete}`} distance={10}>
+        {mode === 'practice' && finished ? <View style={s.result}><CelebrationBurst icon="award" tone={result >= 70 ? 'success' : 'gold'} /><Text style={s.eyebrow}>{t('lesson.complete')}</Text><Text style={s.pathHeroTitle}>{legalTitle(item.title, item.englishTitle)}</Text><Text style={s.score}>{formatNumber(result)}%</Text><View style={s.rewardRow}><RewardChip icon="zap" value={`+${formatNumber(earnedXp)} XP`} label="XP" /><RewardChip icon="activity" value={formatNumber(bestCombo)} label={t('lesson.chain', { count: formatNumber(bestCombo) })} /></View><Text style={s.centerBody}>{t('lesson.progressSaved')}</Text><ActionButton label={t('lesson.backPath')} direction="back" onPress={navigation.goBack} fullWidth /></View>
+        : mode === 'study' && studyComplete ? <View style={s.studyCompleteCard}><View style={s.studyCompleteIcon}><Feather name="check" size={31} color={palette.white} /></View><Text style={s.eyebrow}>{t('lesson.studyMode')}</Text><Text style={s.pathHeroTitle}>{t('lesson.studyComplete')}</Text><Text style={s.centerBody}>{t('lesson.studyCompleteBody')}</Text><View style={s.studyCompleteActions}><ActionButton label={t('lesson.startPractice')} icon="edit-3" direction="forward" onPress={() => selectMode('practice')} fullWidth /><ActionButton label={t('lesson.backPath')} direction="back" variant="secondary" onPress={navigation.goBack} fullWidth /></View></View>
+        : mode === 'study' ? <LessonSection item={item} index={section} compact={compact} />
         : question ? <QuizCard question={question} selected={selected} revealed={revealed} combo={combo} onSelect={setSelected} /> : null}
         </MotionView>
       </ScrollView>
-      {!finished ? <View style={s.lessonFooter}>{quiz >= 0 && selected === null ? <Text style={s.requiredAnswer}>{t('lesson.answerRequired')}</Text> : null}<ActionButton label={quiz < 0 ? (section === item.sections.length - 1 ? t('lesson.startQuiz') : t('lesson.nextSection')) : revealed ? (quiz === item.quiz.length - 1 ? t('lesson.submit') : t('lesson.nextQuestion')) : t('lesson.checkAnswer')} direction="forward" onPress={advance} disabled={quiz >= 0 && selected === null} sound={quiz < 0 || revealed} fullWidth /></View> : null}
+      {mode === 'study' && !studyComplete ? <View style={s.lessonFooter}><ActionButton label={section === item.sections.length - 1 ? t('lesson.finishStudy') : t('lesson.nextSection')} direction="forward" onPress={advance} sound fullWidth /></View> : null}
+      {mode === 'practice' && !finished ? <View style={s.lessonFooter}>{selected === null ? <Text style={s.requiredAnswer}>{t('lesson.answerRequired')}</Text> : null}<ActionButton label={revealed ? (quiz === item.quiz.length - 1 ? t('lesson.submit') : t('lesson.nextQuestion')) : t('lesson.checkAnswer')} direction="forward" onPress={advance} disabled={selected === null} sound={revealed} fullWidth /></View> : null}
     </SafeAreaView>
   );
 }
 
-function LessonSection({ item, index }: { item: Lesson; index: number }) {
+function LessonModeTabs({ mode, studyCount, practiceCount, onChange }: { mode: LessonMode; studyCount: number; practiceCount: number; onChange: (mode: LessonMode) => void }) {
+  const { t, formatNumber } = useI18n();
+  const tabs: Array<{ mode: LessonMode; icon: IconName; title: string; meta: string }> = [
+    { mode: 'study', icon: 'book-open', title: t('lesson.studyMode'), meta: t('home.sections', { count: formatNumber(studyCount) }) },
+    { mode: 'practice', icon: 'edit-3', title: t('lesson.practiceMode'), meta: `${formatNumber(practiceCount)} ${t('common.questions')}` },
+  ];
+  return <View style={s.lessonModeShell}><View accessibilityRole="tablist" style={s.lessonModeTabs}>{tabs.map((tab) => {
+    const active = mode === tab.mode;
+    return <Pressable key={tab.mode} accessibilityRole="tab" accessibilityState={{ selected: active }} onPress={() => onChange(tab.mode)} style={({ pressed }) => [s.lessonModeTab, active && s.lessonModeTabActive, pressed && s.pressed]}><View style={[s.lessonModeIcon, active && s.lessonModeIconActive]}><Feather name={tab.icon} size={19} color={active ? palette.white : palette.muted} /></View><View style={s.flexEnd}><Text style={[s.lessonModeTitle, active && s.lessonModeTitleActive]}>{tab.title}</Text><Text style={[s.lessonModeMeta, active && s.lessonModeMetaActive]}>{tab.meta}</Text></View></Pressable>;
+  })}</View></View>;
+}
+
+function LessonSection({ item, index, compact }: { item: Lesson; index: number; compact: boolean }) {
   const part = item.sections[index]!;
   const { t, formatNumber, language } = useI18n();
-  return <View style={s.reading}>
+  return <View style={[s.reading, compact && s.readingCompact]}>
     <Text style={s.eyebrow}>{t('lesson.section', { current: formatNumber(index + 1), total: formatNumber(item.sections.length) })}</Text>
     {language !== 'fa' ? <View style={s.translationInline}><Feather name="globe" size={17} color={palette.primary} /><Text style={s.translationInlineText}>{t('language.contentFallback')}</Text></View> : null}
-    <Text style={s.readingTitle}>{part.title}</Text>
-    <Text style={s.readingBody}>{part.body}</Text>
-    {part.bullets?.length ? <View style={s.learningList}>{part.bullets.map((bullet, bulletIndex) => <View key={bulletIndex} style={s.learningPoint}><View style={s.bulletDot} /><Text style={s.learningText}>{bullet}</Text></View>)}</View> : null}
-    {part.example ? <View style={s.exampleCard}><Feather name="briefcase" size={20} color={palette.goldInk} /><View style={s.flexEnd}><Text style={s.exampleLabel}>{t('lesson.example')}</Text><Text style={s.exampleText}>{part.example}</Text></View></View> : null}
-    {part.checklist?.length ? <View style={s.checklistCard}><Text style={s.checklistTitle}>{t('lesson.checklist')}</Text>{part.checklist.map((entry, entryIndex) => <View key={entryIndex} style={s.checkRow}><Feather name="check-square" size={18} color={palette.teal} /><Text style={s.checkText}>{entry}</Text></View>)}</View> : null}
-    {part.callout ? <View style={s.callout}><Feather name="info" size={20} color={palette.primary} /><Text style={s.calloutText}>{part.callout}</Text></View> : null}
-    <View style={s.term}><Text style={s.hint}>{t('lesson.keyTerm')}</Text><Text style={s.termFa}>{language === 'fa' ? part.termFa : part.termEn}</Text><Text style={s.english}>{language === 'fa' ? part.termEn : part.termFa}</Text></View>
-    {part.source ? <View style={s.sourceNote}><Feather name="external-link" size={15} color={palette.muted} /><Text style={s.sourceText}>{part.source}</Text></View> : null}
+    <Text selectable style={[s.readingTitle, compact && s.readingTitleCompact]}>{part.title}</Text>
+    <Text selectable style={[s.readingBody, compact && s.readingBodyCompact]}>{part.body}</Text>
+    {part.bullets?.length ? <View style={s.learningList}>{part.bullets.map((bullet, bulletIndex) => <View key={bulletIndex} style={s.learningPoint}><View style={s.bulletDot} /><Text selectable style={s.learningText}>{bullet}</Text></View>)}</View> : null}
+    {part.example ? <View style={s.exampleCard}><Feather name="briefcase" size={20} color={palette.goldInk} /><View style={s.flexEnd}><Text style={s.exampleLabel}>{t('lesson.example')}</Text><Text selectable style={s.exampleText}>{part.example}</Text></View></View> : null}
+    {part.checklist?.length ? <View style={s.checklistCard}><Text style={s.checklistTitle}>{t('lesson.checklist')}</Text>{part.checklist.map((entry, entryIndex) => <View key={entryIndex} style={s.checkRow}><Feather name="check-square" size={18} color={palette.teal} /><Text selectable style={s.checkText}>{entry}</Text></View>)}</View> : null}
+    {part.callout ? <View style={s.callout}><Feather name="info" size={20} color={palette.primary} /><Text selectable style={s.calloutText}>{part.callout}</Text></View> : null}
+    <View style={s.term}><Text style={s.hint}>{t('lesson.keyTerm')}</Text><Text selectable style={s.termFa}>{language === 'fa' ? part.termFa : part.termEn}</Text><Text selectable style={s.english}>{language === 'fa' ? part.termEn : part.termFa}</Text></View>
+    {part.source ? <View style={s.sourceNote}><Feather name="external-link" size={15} color={palette.muted} /><Text selectable style={s.sourceText}>{part.source}</Text></View> : null}
     <Notice />
   </View>;
 }
@@ -762,7 +961,9 @@ function LessonSection({ item, index }: { item: Lesson; index: number }) {
 function QuizCard({ question, selected, revealed, combo = 0, onSelect }: { question: QuizQuestion; selected: number | null; revealed: boolean; combo?: number; onSelect: (value: number) => void }) {
   const isCorrect = selected === question.correctIndex;
   const { t, formatNumber, language } = useI18n();
-  return <View style={s.reading}><View style={s.quizHeader}><View style={s.iconHero}><Feather name="help-circle" size={25} color={palette.primary} /></View>{combo > 0 ? <MotionView style={s.comboPill} replayKey={combo} distance={5} duration={motion.quick} accessibilityLiveRegion="polite"><Feather name="zap" size={15} color={palette.goldInk} /><Text style={s.comboText}>{t('lesson.chain', { count: formatNumber(combo) })}</Text></MotionView> : null}</View><Text style={s.eyebrow}>{t('lesson.assessment')}</Text>{language !== 'fa' ? <View style={s.translationInline}><Feather name="globe" size={17} color={palette.primary} /><Text style={s.translationInlineText}>{t('language.contentFallback')}</Text></View> : null}<Text style={s.quizTitle}>{question.prompt}</Text><View style={s.quizAnswers}>{question.answers.map((answer, index) => {
+  const { width } = useWindowDimensions();
+  const compact = width < 600;
+  return <View style={[s.reading, compact && s.readingCompact]}><View style={s.quizHeader}><View style={s.iconHero}><Feather name="help-circle" size={25} color={palette.primary} /></View>{combo > 0 ? <MotionView style={s.comboPill} replayKey={combo} distance={5} duration={motion.quick} accessibilityLiveRegion="polite"><Feather name="zap" size={15} color={palette.goldInk} /><Text style={s.comboText}>{t('lesson.chain', { count: formatNumber(combo) })}</Text></MotionView> : null}</View><Text style={s.eyebrow}>{t('lesson.assessment')}</Text>{language !== 'fa' ? <View style={s.translationInline}><Feather name="globe" size={17} color={palette.primary} /><Text style={s.translationInlineText}>{t('language.contentFallback')}</Text></View> : null}<Text selectable style={[s.quizTitle, compact && s.quizTitleCompact]}>{question.prompt}</Text><View style={s.quizAnswers}>{question.answers.map((answer, index) => {
     const chosen = selected === index;
     const good = revealed && index === question.correctIndex;
     const bad = revealed && chosen && !good;
@@ -907,7 +1108,7 @@ function Review() {
     reviewAnswer(record!.questionId, selected === question.correctIndex);
     setSelected(null); setRevealed(false);
   };
-  return <Page><Header eyebrow={t('nav.review')} title={t('review.title')} subtitle={t('review.subtitle')} /><View style={s.stats}><Stat icon="inbox" value={formatNumber(due.length)} label={t('review.now')} color={palette.primary} soft={palette.primarySoft} /><Stat icon="calendar" value={formatNumber(state.reviewQueue.length - due.length)} label={t('review.later')} color={palette.teal} soft={palette.tealSoft} /></View>{question ? <View style={s.list}><Text style={s.hint}>{lesson ? legalTitle(lesson.title, lesson.englishTitle) : ''}</Text><QuizCard question={question} selected={selected} revealed={revealed} onSelect={setSelected} /><ActionButton label={revealed ? t('lesson.nextQuestion') : t('lesson.checkAnswer')} direction="forward" onPress={advance} disabled={selected === null} sound={revealed} fullWidth /></View> : <Empty icon="check-circle" title={t('review.done')} body={t('review.subtitle')} />}<Notice /></Page>;
+  return <Page tone="review"><Header eyebrow={t('nav.review')} title={t('review.title')} subtitle={t('review.subtitle')} /><View style={s.stats}><Stat icon="inbox" value={formatNumber(due.length)} label={t('review.now')} color={palette.primary} soft={palette.primarySoft} /><Stat icon="calendar" value={formatNumber(state.reviewQueue.length - due.length)} label={t('review.later')} color={palette.teal} soft={palette.tealSoft} /></View>{question ? <View style={s.list}><Text style={s.hint}>{lesson ? legalTitle(lesson.title, lesson.englishTitle) : ''}</Text><QuizCard question={question} selected={selected} revealed={revealed} onSelect={setSelected} /><ActionButton label={revealed ? t('lesson.nextQuestion') : t('lesson.checkAnswer')} direction="forward" onPress={advance} disabled={selected === null} sound={revealed} fullWidth /></View> : <Empty icon="check-circle" title={t('review.done')} body={t('review.subtitle')} />}<Notice /></Page>;
 }
 
 function Practice() {
@@ -924,7 +1125,7 @@ function Practice() {
     const scores = state.testHistory.filter((item) => item.stage === stage).map((item) => item.score);
     return scores.length ? formatNumber(Math.max(...scores)) + '%' : '—';
   };
-  return <Page>
+  return <Page tone="practice">
     <Header eyebrow="SQE1" title={t('practice.title')} subtitle={t('practice.subtitle', { count: formatNumber(sqeTotals.practiceQuestions) })} />
     <View style={s.examGrid}>{(['FLK1','FLK2'] as SqeStage[]).map((stage) => <View key={stage} style={s.examPanel}><View style={s.between}><View style={[s.pathIcon,{backgroundColor:stage==='FLK1'?palette.primarySoft:palette.tealSoft}]}><Feather name={stage==='FLK1'?'briefcase':'home'} size={23} color={stage==='FLK1'?palette.primary:palette.teal} /></View><View style={s.flexEnd}><Text style={s.examStage}>{stage}</Text><Text style={s.hint}>{formatNumber(stageSubjects(stage).length)} · {best(stage)}</Text></View></View><View style={s.list}>{modes.map((item) => <Pressable key={item.mode} accessibilityRole="button" onPress={() => nav.navigate('Test',{stage,count:item.count,mode:item.mode})} style={({pressed})=>[s.modeRow,pressed&&s.pressed]}><View style={s.modeIcon}><Feather name={item.icon} size={19} color={palette.primary} /></View><View style={s.flexEnd}><Text style={s.modeTitle}>{item.title}</Text><Text style={s.hint}>{item.subtitle}</Text></View><DirectionalChevron size={20} color={palette.muted} /></Pressable>)}</View></View>)}</View>
     <View style={s.examNote}><Feather name="info" size={20} color={palette.primary} /><View style={s.flexEnd}><Text style={s.smallStrong}>{t('practice.full')}</Text><Text style={s.hint}>{t('practice.subtitle', { count: formatNumber(180) })} · Annex 4 · 2 × 90 · 2 × 153 min</Text></View></View>
@@ -1050,7 +1251,7 @@ function Profile() {
   };
   const reset = () => Alert.alert(t('profile.resetTitle'), t('profile.resetBody'), [{ text: t('profile.cancel'), style: 'cancel' }, { text: t('profile.erase'), style: 'destructive', onPress: () => void resetProgress() }]);
   return (
-    <Page>
+    <Page tone="profile">
       <Header eyebrow={guest ? t('profile.guestEyebrow') : t('profile.eyebrow')} title={t('profile.title')} subtitle={guest ? t('profile.guestSubtitle') : state.accountMode === 'cloud' ? t('profile.cloudSubtitle') : t('profile.subtitle')} />
       <View style={s.profile}>
         <View style={s.avatar}><Feather name="user" size={30} color={palette.white} /></View>
@@ -1324,15 +1525,25 @@ function LanguagePicker({ value, onChange, compact = false }: { value: AppLangua
   </View>;
 }
 
-function Page({ children }: { children: ReactNode }) {
+type PageTone = 'home' | 'learn' | 'review' | 'practice' | 'profile';
+
+function Page({ children, tone = 'home' }: { children: ReactNode; tone?: PageTone }) {
   const { width } = useWindowDimensions();
-  return <SafeAreaView style={s.safe}>
+  const toneStyle = {
+    home: s.pageToneHome,
+    learn: s.pageToneLearn,
+    review: s.pageToneReview,
+    practice: s.pageTonePractice,
+    profile: s.pageToneProfile,
+  }[tone];
+  return <SafeAreaView style={[s.safe, toneStyle]}>
     {darkMode ? <View accessible={false} style={s.pageAtmosphere}><View style={s.ambientPrimary} /><View style={s.ambientTeal} /><View style={s.ambientWarm} /></View> : null}
-    <ScrollView contentContainerStyle={[s.page, width >= 1100 && s.pageWide]}><MotionView role="main" style={s.pageMotion} distance={10} duration={motion.standard}>{children}</MotionView></ScrollView>
+    <ScrollView style={s.pageScroll} contentContainerStyle={[s.page, width >= 1100 && s.pageWide]}><MotionView role="main" style={s.pageMotion} distance={10} duration={motion.standard}>{children}</MotionView></ScrollView>
   </SafeAreaView>;
 }
 function Header({ eyebrow, title, subtitle }: { eyebrow: string; title: string; subtitle: string }) {
-  return <View style={s.header}><Brand /><View style={s.flexEnd}><View style={s.headerEyebrow}><View style={s.headerDot} /><Text style={s.eyebrow}>{eyebrow}</Text></View><Text role="heading" style={s.pageTitle}>{title}</Text><Text style={s.body}>{subtitle}</Text></View></View>;
+  const { width } = useWindowDimensions();
+  return <View style={s.header}>{width < 1080 ? <Brand /> : null}<View style={s.flexEnd}><View style={s.headerEyebrow}><View style={s.headerDot} /><Text style={s.eyebrow}>{eyebrow}</Text></View><Text role="heading" style={s.pageTitle}>{title}</Text><Text style={s.body}>{subtitle}</Text></View></View>;
 }
 function TopBar({ onBack }: { onBack: () => void }) { const { t, isRtl } = useI18n(); return <View style={s.topBar}><Brand /><RoundIcon icon={isRtl ? 'arrow-right' : 'arrow-left'} label={t('common.back')} onPress={onBack} /></View>; }
 function DirectionalChevron({ size, color }: { size: number; color: string }) { const { isRtl } = useI18n(); return <Feather name={isRtl ? 'chevron-left' : 'chevron-right'} size={size} color={color} />; }
@@ -1395,6 +1606,12 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   flex: { flex: 1 },
   flexEnd: { flex: 1, alignItems: logicalEnd },
   safe: { flex: 1, backgroundColor: palette.background },
+  pageToneHome: { backgroundColor: palette.sectionHome },
+  pageToneLearn: { backgroundColor: palette.sectionLearn },
+  pageToneReview: { backgroundColor: palette.sectionReview },
+  pageTonePractice: { backgroundColor: palette.sectionPractice },
+  pageToneProfile: { backgroundColor: palette.sectionProfile },
+  pageScroll: { flex: 1, backgroundColor: 'transparent' },
   pageAtmosphere: { ...StyleSheet.absoluteFillObject, overflow: 'hidden', pointerEvents: 'none' },
   ambientPrimary: { position: 'absolute', width: 520, height: 520, top: -290, right: -210, borderRadius: 260, backgroundColor: palette.ambientPrimary },
   ambientTeal: { position: 'absolute', width: 420, height: 420, top: '38%', left: -270, borderRadius: 210, backgroundColor: palette.ambientSecondary },
@@ -1403,30 +1620,48 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   disabled: { opacity: 0.5 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, backgroundColor: palette.background },
   loadingLogo: { width: 62, height: 62, borderRadius: 21, backgroundColor: palette.primaryAction, alignItems: 'center', justifyContent: 'center' },
-  tabsMobile: { position: 'absolute', left: 12, right: 12, bottom: 10, height: 82, paddingHorizontal: 6, paddingTop: 6, paddingBottom: 6, borderTopWidth: 0, borderWidth: 1, borderColor: palette.line, borderRadius: 26, backgroundColor: palette.surface, ...shadow },
-  tabsDesktopHost: { position: 'relative', width: 238, flexShrink: 0, backgroundColor: palette.background },
-  tabsDesktop: { width: 214, margin: 12, paddingTop: 24, paddingHorizontal: 10, paddingBottom: 18, borderTopWidth: 0, borderRightWidth: 0, backgroundColor: 'transparent' },
-  tabItem: { minHeight: 62, marginHorizontal: 2, marginVertical: 2, borderRadius: 18, overflow: 'hidden' },
-  tabItemDesktop: { minHeight: 64, marginHorizontal: 0, marginVertical: 3 },
+  tabsMobile: { position: 'absolute', left: 12, right: 12, bottom: 10, height: 76, paddingHorizontal: 6, paddingTop: 5, paddingBottom: 5, borderTopWidth: 0, borderWidth: 1, borderColor: palette.line, borderRadius: 23, backgroundColor: palette.surface, ...shadow },
+  tabItem: { minHeight: 58, marginHorizontal: 2, marginVertical: 2, borderRadius: 17, overflow: 'hidden' },
   navIcon: { position: 'relative', width: 31, height: 31, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.surfaceMuted },
   navIconActive: { backgroundColor: palette.primaryAction, ...createAccentGlow(palette) },
   navLabel: { color: palette.muted, fontSize: 10, lineHeight: 15, fontWeight: '700', textAlign: 'center', writingDirection: 'rtl' },
-  navLabelDesktop: { fontSize: 12, lineHeight: 18, textAlign: 'right' },
   navLabelActive: { color: palette.primaryDark, fontWeight: '900' },
   navActiveDot: { position: 'absolute', width: 7, height: 7, top: -2, right: -2, borderRadius: 4, backgroundColor: palette.saffron, borderWidth: 1, borderColor: palette.surface },
-  sidebarBackdrop: { position: 'absolute', pointerEvents: 'none', overflow: 'hidden', top: 12, right: 12, bottom: 12, left: 12, borderWidth: 1, borderColor: palette.line, borderRadius: 28, backgroundColor: palette.surface, ...shadow },
-  sidebarGlow: { position: 'absolute', width: 190, height: 190, top: -110, left: -80, borderRadius: 95, backgroundColor: palette.primarySoft, opacity: 0.72 },
-  sidebarArtworkButton: { position: 'absolute', zIndex: 1, left: 24, right: 24, bottom: 24, height: 190, overflow: 'hidden', borderRadius: 22 },
-  sidebarArtworkPressed: { opacity: 0.86, transform: [{ scale: 0.985 }] },
-  sidebarArtwork: { flex: 1, width: '100%', justifyContent: 'flex-end' },
-  sidebarArtworkImage: { borderRadius: 22 },
-  sidebarArtworkScrim: { ...StyleSheet.absoluteFillObject, borderRadius: 22, backgroundColor: palette.imageScrimStrong, opacity: 0.7 },
-  sidebarArtworkContent: { padding: 16, alignItems: logicalEnd },
-  sidebarArtworkTop: { width: '100%', flexDirection: rowDirection, alignItems: 'center', justifyContent: 'space-between' },
-  sidebarArtworkIcon: { width: 39, height: 39, marginBottom: 11, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.overlaySurface, borderWidth: 1, borderColor: palette.overlayBorder },
-  sidebarArtworkTitle: { color: palette.white, fontSize: 14, lineHeight: 22, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
-  sidebarArtworkMeta: { color: palette.onPrimaryMuted, fontSize: 10, lineHeight: 17, textAlign: 'right', writingDirection: 'rtl', marginTop: 4 },
-  sidebarProgress: { width: '100%', marginTop: 12 },
+  desktopNavShell: { width: 278, flexShrink: 0, margin: 16, padding: 18, borderWidth: 1, borderColor: palette.line, borderRadius: 28, backgroundColor: palette.surface, ...shadow },
+  desktopNavShellCompact: { marginVertical: 10, paddingVertical: 13 },
+  desktopNavBrand: { minHeight: 60, justifyContent: 'center', marginBottom: 15, paddingHorizontal: 4 },
+  desktopNavBrandCompact: { minHeight: 51, marginBottom: 9 },
+  desktopPlanCard: { gap: 7, padding: 15, borderWidth: 1, borderColor: palette.line, borderRadius: 20, backgroundColor: palette.surfaceMuted, marginBottom: 21 },
+  desktopPlanCardCompact: { gap: 5, paddingVertical: 10, marginBottom: 13 },
+  desktopPlanTop: { flexDirection: rowDirection, alignItems: 'center', justifyContent: 'space-between' },
+  desktopPlanIcon: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.saffronSoft },
+  desktopPlanIconCompact: { width: 31, height: 31, borderRadius: 10 },
+  desktopPlanBadge: { minHeight: 27, justifyContent: 'center', paddingHorizontal: 10, borderRadius: radius.round, backgroundColor: palette.surface },
+  desktopPlanBadgeText: { color: palette.primary, fontSize: 10, fontFamily: type.latinBold, letterSpacing: 0.7 },
+  desktopPlanTitle: { color: palette.ink, fontSize: 13, lineHeight: 20, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
+  desktopPlanMeta: { color: palette.muted, fontSize: 10, fontFamily: type.latinSemibold, letterSpacing: 0.25, textAlign: 'right' },
+  desktopNavSection: { color: palette.muted, fontSize: 10, lineHeight: 17, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.9, textAlign: 'right', writingDirection: 'rtl', marginBottom: 8, paddingHorizontal: 8 },
+  desktopNavList: { gap: 6 },
+  desktopNavItem: { position: 'relative', minHeight: 54, flexDirection: rowDirection, alignItems: 'center', gap: 12, paddingHorizontal: 10, borderWidth: 1, borderColor: 'transparent', borderRadius: 17, backgroundColor: 'transparent' },
+  desktopNavItemCompact: { minHeight: 48 },
+  desktopNavItemActive: { borderColor: palette.secondaryBorder, backgroundColor: palette.primarySoft },
+  desktopNavItemPressed: { opacity: 0.82, transform: [{ scale: 0.985 }] },
+  desktopNavItemIcon: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.surfaceMuted },
+  desktopNavItemIconActive: { backgroundColor: palette.primaryAction, ...createAccentGlow(palette) },
+  desktopNavItemText: { flex: 1, color: palette.inkSoft, fontSize: 13, lineHeight: 20, fontWeight: '700', textAlign: 'right', writingDirection: 'rtl' },
+  desktopNavItemTextActive: { color: palette.primaryDark, fontWeight: '900' },
+  desktopNavMarker: { position: 'absolute', top: 15, bottom: 15, width: 3, borderRadius: radius.round, backgroundColor: palette.saffron, ...(isRtl ? { right: -1 } : { left: -1 }) },
+  desktopNavSpacer: { flex: 1, minHeight: 18 },
+  desktopLibraryCard: { gap: 8, minHeight: 142, padding: 16, borderWidth: 1, borderColor: palette.line, borderRadius: 21, backgroundColor: palette.surfaceMuted },
+  desktopLibraryCardCompact: { gap: 6, minHeight: 112, paddingVertical: 12 },
+  desktopLibraryCardPressed: { opacity: 0.84, transform: [{ scale: 0.985 }] },
+  desktopLibraryTop: { flexDirection: rowDirection, alignItems: 'center', justifyContent: 'space-between' },
+  desktopLibraryIcon: { width: 39, height: 39, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.primarySoft },
+  desktopLibraryTitle: { color: palette.ink, fontSize: 14, lineHeight: 21, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
+  desktopLibraryMeta: { color: palette.muted, fontSize: 10, lineHeight: 16, textAlign: 'right', writingDirection: 'rtl' },
+  desktopLibraryProgress: { marginTop: 4 },
+  desktopNavFooter: { minHeight: 42, flexDirection: rowDirection, alignItems: 'center', gap: 8, paddingHorizontal: 4, marginTop: 13 },
+  desktopNavFooterText: { flex: 1, color: palette.muted, fontSize: 9, lineHeight: 14, textAlign: 'right', writingDirection: 'rtl' },
   page: { width: '100%', maxWidth: 1160, alignSelf: 'center', padding: 20, paddingBottom: 108 },
   pageMotion: { width: '100%', gap: 26 },
   pageWide: { paddingHorizontal: 38, paddingTop: 34 },
@@ -1459,6 +1694,53 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   authReset: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   authResetText: { color: palette.rose, fontSize: 12, fontWeight: '800', writingDirection: 'rtl' },
   authLinkText: { color: palette.primary, fontSize: 12, fontWeight: '800', writingDirection: 'rtl' },
+  mobileHome: { gap: 20 },
+  mobileAppHeader: { minHeight: 58, flexDirection: rowDirection, alignItems: 'center', justifyContent: 'space-between' },
+  mobileProfileButton: { position: 'relative', width: 48, height: 48, borderRadius: 17, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: palette.line, backgroundColor: palette.surface },
+  mobileProfileStatus: { position: 'absolute', top: 7, right: 7, width: 8, height: 8, borderRadius: 4, borderWidth: 2, borderColor: palette.surface, backgroundColor: palette.teal },
+  mobileGreeting: { alignItems: logicalEnd, gap: 4, marginTop: 2 },
+  mobileEyebrow: { color: palette.primary, fontSize: 11, lineHeight: 17, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
+  mobileTitle: { color: palette.ink, fontSize: 28, lineHeight: 38, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
+  mobileSubtitle: { color: palette.muted, fontSize: 14, lineHeight: 23, textAlign: 'right', writingDirection: 'rtl' },
+  mobileMomentumCard: { gap: 14, padding: 18, borderRadius: 24, backgroundColor: palette.brandSurface, ...createAccentGlow(palette) },
+  mobileMomentumTop: { flexDirection: rowDirection, alignItems: 'center', justifyContent: 'space-between', gap: 16 },
+  mobileMomentumCopy: { alignItems: logicalEnd },
+  mobileMomentumLabel: { color: palette.onPrimaryMuted, fontSize: 12, lineHeight: 18, fontWeight: '700', textAlign: 'right', writingDirection: 'rtl' },
+  mobileMomentumValue: { color: palette.white, fontSize: 34, lineHeight: 43, fontFamily: type.latinBold },
+  mobileMomentumSignal: { minWidth: 92, minHeight: 64, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, borderWidth: 1, borderColor: palette.overlayBorder, borderRadius: 18, backgroundColor: palette.overlaySurface },
+  mobileMomentumSignalValue: { color: palette.white, fontSize: 18, lineHeight: 24, fontFamily: type.latinBold },
+  mobileMomentumSignalText: { color: palette.onPrimaryMuted, fontSize: 10, lineHeight: 15, textAlign: 'center', writingDirection: 'rtl' },
+  mobileMomentumMeta: { color: palette.onPrimaryMuted, fontSize: 11, lineHeight: 17, textAlign: 'right', writingDirection: 'rtl' },
+  mobileSectionHeader: { minHeight: 44, flexDirection: rowDirection, alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  mobileSectionTitle: { flex: 1, color: palette.ink, fontSize: 20, lineHeight: 29, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
+  mobileSectionLink: { minHeight: 44, flexDirection: rowDirection, alignItems: 'center', gap: 4, paddingHorizontal: 8 },
+  mobileSectionLinkText: { color: palette.primary, fontSize: 12, lineHeight: 18, fontWeight: '900', writingDirection: 'rtl' },
+  mobileStageList: { gap: 12 },
+  mobileStageCard: { minHeight: 154, gap: 10, padding: 18, borderWidth: 1, borderColor: palette.line, borderRadius: 23, backgroundColor: palette.surface, ...shadow },
+  mobileStageCardPressed: { opacity: 0.86, transform: [{ scale: 0.985 }] },
+  mobileStageTop: { flexDirection: rowDirection, alignItems: 'center', justifyContent: 'space-between' },
+  mobileStageName: { color: palette.ink, fontSize: 29, lineHeight: 37, fontFamily: type.latinBold, letterSpacing: 0.3 },
+  mobileStageArrow: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.primarySoft },
+  mobileStageUnits: { color: palette.inkSoft, fontSize: 13, lineHeight: 20, textAlign: 'right', writingDirection: 'rtl' },
+  mobileStageProgressRow: { flexDirection: rowDirection, alignItems: 'center', justifyContent: 'space-between', marginTop: 2 },
+  mobileStageProgressText: { color: palette.muted, fontSize: 11, lineHeight: 17, fontFamily: type.latinSemibold },
+  mobileStagePercent: { color: palette.primary, fontSize: 11, lineHeight: 17, fontFamily: type.latinBold },
+  mobileQuickSession: { minHeight: 126, flexDirection: rowDirection, alignItems: 'center', gap: 14, padding: 18, borderRadius: 25, backgroundColor: palette.primaryAction, ...createAccentGlow(palette) },
+  mobileQuickSessionPressed: { opacity: 0.88, transform: [{ scale: 0.985 }] },
+  mobileQuickIcon: { width: 54, height: 54, borderRadius: 19, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: palette.overlayBorder, backgroundColor: palette.overlaySurface },
+  mobileQuickCopy: { flex: 1, alignItems: logicalEnd },
+  mobileQuickLabel: { color: palette.onPrimaryMuted, fontSize: 11, lineHeight: 17, fontWeight: '800', textAlign: 'right', writingDirection: 'rtl' },
+  mobileQuickTitle: { color: palette.white, fontSize: 17, lineHeight: 25, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl', marginTop: 2 },
+  mobileQuickMeta: { color: palette.onPrimaryMuted, fontSize: 10, lineHeight: 16, textAlign: 'right', writingDirection: 'rtl', marginTop: 5 },
+  mobileActionList: { gap: 10 },
+  mobileActionRow: { minHeight: 74, flexDirection: rowDirection, alignItems: 'center', gap: 13, padding: 13, borderWidth: 1, borderColor: palette.line, borderRadius: 20, backgroundColor: palette.surface },
+  mobileActionRowPressed: { borderColor: palette.pressBorder, backgroundColor: palette.primarySoft },
+  mobileActionIcon: { width: 44, height: 44, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.primarySoft },
+  mobileActionCopy: { flex: 1, alignItems: logicalEnd },
+  mobileActionTitle: { color: palette.ink, fontSize: 14, lineHeight: 21, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
+  mobileActionSubtitle: { color: palette.muted, fontSize: 11, lineHeight: 17, textAlign: 'right', writingDirection: 'rtl', marginTop: 2 },
+  mobileTranslationNote: { flexDirection: rowDirection, alignItems: 'flex-start', gap: 9, padding: 13, borderWidth: 1, borderColor: palette.secondaryBorder, borderRadius: 18, backgroundColor: palette.primarySoft },
+  mobileTranslationText: { flex: 1, color: palette.inkSoft, fontSize: 11, lineHeight: 18, textAlign: 'right', writingDirection: 'rtl' },
   header: { gap: 25 },
   headerEyebrow: { flexDirection: rowDirection, alignItems: 'center', gap: 8, marginBottom: 6 },
   headerDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: palette.saffron },
@@ -1556,6 +1838,18 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   pathHero: { padding: 27, borderRadius: radius.xl, alignItems: logicalEnd, gap: 7 },
   pathHeroIcon: { width: 60, height: 60, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   pathHeroTitle: { color: palette.ink, fontSize: 27, lineHeight: 39, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
+  pathModeGrid: { flexDirection: rowDirection, flexWrap: 'wrap', gap: 14 },
+  pathModeCard: { flexGrow: 1, flexBasis: 290, minWidth: 260, minHeight: 192, gap: 13, padding: 20, borderWidth: 1, borderRadius: radius.xl, backgroundColor: palette.surface, ...shadow },
+  pathModeStudy: { borderColor: palette.secondaryBorder },
+  pathModePractice: { borderColor: palette.teal },
+  pathModeCardPressed: { opacity: 0.86, transform: [{ scale: 0.99 }] },
+  pathModeIcon: { width: 50, height: 50, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  pathModeStudyIcon: { backgroundColor: palette.primarySoft },
+  pathModePracticeIcon: { backgroundColor: palette.tealSoft },
+  pathModeTitle: { color: palette.ink, fontSize: 19, lineHeight: 28, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
+  pathModeHint: { color: palette.muted, fontSize: 13, lineHeight: 22, textAlign: 'right', writingDirection: 'rtl', marginTop: 3 },
+  pathModeAction: { marginTop: 'auto', minHeight: 44, flexDirection: rowDirection, alignItems: 'center', gap: 7 },
+  pathModeActionText: { color: palette.primary, fontSize: 12, lineHeight: 19, fontWeight: '900', writingDirection: 'rtl' },
   smallStrong: { color: palette.inkSoft, fontSize: 11, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
   list: { gap: 11 },
   lessonRow: { minHeight: 102, flexDirection: rowDirection, alignItems: 'center', gap: 13, padding: 15, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.surface, ...shadow },
@@ -1563,17 +1857,35 @@ const createStyles = (palette: AppPalette, isRtl = true) => {
   done: { backgroundColor: palette.success, borderColor: palette.success },
   number: { color: palette.inkSoft, fontSize: 14, fontFamily: type.latinBold },
   lessonTop: { minHeight: 72, flexDirection: rowDirection, alignItems: 'center', gap: 13, paddingHorizontal: 17, borderBottomWidth: 1, borderBottomColor: palette.line, backgroundColor: palette.surface },
-  lessonPage: { flexGrow: 1, width: '100%', maxWidth: 760, alignSelf: 'center', justifyContent: 'center', padding: 20 },
+  lessonModeShell: { width: '100%', paddingHorizontal: 16, paddingTop: 12, backgroundColor: palette.surface },
+  lessonModeTabs: { width: '100%', maxWidth: 720, alignSelf: 'center', flexDirection: rowDirection, gap: 8, padding: 5, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.background },
+  lessonModeTab: { flex: 1, minHeight: 58, flexDirection: rowDirection, alignItems: 'center', justifyContent: 'center', gap: 9, paddingHorizontal: 11, borderRadius: radius.md },
+  lessonModeTabActive: { backgroundColor: palette.primaryAction, ...createAccentGlow(palette) },
+  lessonModeIcon: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.surfaceMuted },
+  lessonModeIconActive: { backgroundColor: palette.overlaySurface },
+  lessonModeTitle: { color: palette.inkSoft, fontSize: 13, lineHeight: 19, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
+  lessonModeTitleActive: { color: palette.white },
+  lessonModeMeta: { color: palette.muted, fontSize: 10, lineHeight: 15, textAlign: 'right', writingDirection: 'rtl' },
+  lessonModeMetaActive: { color: palette.onPrimaryMuted },
+  lessonPage: { flexGrow: 1, width: '100%', maxWidth: 720, alignSelf: 'center', justifyContent: 'flex-start', padding: 24, paddingTop: 28 },
+  lessonPageCompact: { padding: 14, paddingTop: 18 },
   lessonMotion: { width: '100%' },
   lessonFooter: { gap: 8, padding: 14, borderTopWidth: 1, borderTopColor: palette.line, backgroundColor: palette.surface },
-  reading: { gap: 14, padding: 25, alignItems: logicalEnd, borderWidth: 1, borderColor: palette.line, borderRadius: radius.xl, backgroundColor: palette.surface, ...shadow },
+  reading: { width: '100%', gap: 18, padding: 32, alignItems: logicalEnd, borderWidth: 1, borderColor: palette.line, borderRadius: radius.xl, backgroundColor: palette.surface, ...shadow },
+  readingCompact: { gap: 15, padding: 19, borderRadius: radius.lg },
   readingTitle: { color: palette.ink, fontSize: 28, lineHeight: 41, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
-  readingBody: { color: palette.inkSoft, fontSize: 17, lineHeight: 32, textAlign: 'right', writingDirection: 'rtl' },
+  readingTitleCompact: { fontSize: 24, lineHeight: 35 },
+  readingBody: { width: '100%', color: palette.inkSoft, fontSize: 17, lineHeight: 31, textAlign: 'right', writingDirection: 'rtl' },
+  readingBodyCompact: { fontSize: 16, lineHeight: 29 },
+  studyCompleteCard: { width: '100%', gap: 13, padding: 30, alignItems: 'center', borderWidth: 1, borderColor: palette.secondaryBorder, borderRadius: radius.xl, backgroundColor: palette.surface, ...shadow },
+  studyCompleteIcon: { width: 66, height: 66, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: palette.primaryAction, ...createAccentGlow(palette) },
+  studyCompleteActions: { width: '100%', gap: 10, marginTop: 8 },
   callout: { width: '100%', flexDirection: rowDirection, alignItems: 'flex-start', gap: 10, padding: 15, borderRadius: radius.md, backgroundColor: palette.primarySoft },
   calloutText: { flex: 1, color: palette.primaryDark, fontSize: 13, lineHeight: 22, textAlign: 'right', writingDirection: 'rtl' },
   term: { width: '100%', padding: 17, borderWidth: 1, borderColor: palette.line, borderRadius: radius.lg, backgroundColor: palette.background, alignItems: logicalEnd },
   termFa: { color: palette.ink, fontSize: 20, fontWeight: '900', writingDirection: 'rtl', marginTop: 4 },
   quizTitle: { color: palette.ink, fontSize: 23, lineHeight: 35, fontWeight: '900', textAlign: 'right', writingDirection: 'rtl' },
+  quizTitleCompact: { fontSize: 20, lineHeight: 31 },
   quizAnswers: { width: '100%', alignSelf: 'stretch', gap: 11 },
   answer: { minHeight: 59, flexDirection: rowDirection, alignItems: 'center', gap: 11, padding: 13, borderWidth: 1, borderColor: palette.line, borderRadius: radius.md, backgroundColor: palette.background },
   answerChosen: { borderColor: palette.primary, backgroundColor: palette.primarySoft },

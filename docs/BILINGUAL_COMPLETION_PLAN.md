@@ -25,9 +25,9 @@ Work in progress: English and Persian only. Publication remains blocked until su
 ## Engineering and release follow-up
 
 - Deploy `supabase/migrations/202609160001_study_progress.sql` to the authorized Supabase project before releasing this client to cloud-account users. It is not deployed by editing the local file. Verify two-device sync, guest-to-account migration and account isolation.
-- Repair the local dependency installation: `expo-auth-session`, `expo-web-browser`, `@supabase/supabase-js` and `expo-linking` are absent from the available node_modules. Expo SDK 54 specifies `expo-linking ~8.0.12`; it is now declared directly and already resolved in the lockfile. Do not suppress these type errors with fake declarations.
+- Dependency repair completed: Windows Controlled Folder Access was blocking Node.js package writes and Git object creation. With the owner's approval, the specific blocked Node/Git executables were allowed; protection remains enabled. Installation now succeeds. Expo SDK 54's `expo-linking ~8.0.12` is declared directly and resolved in the lockfile.
 - Verify storage failure reporting and concurrent writes; test refresh/restart, logout/login and updated-content behavior without progress loss. Question history and reading versioning have pure tests, but full storage/cloud round trips still require end-to-end validation.
-- Run typecheck, functional tests, bilingual tests, web export and actual browser flows after dependencies are restored. Then test physical iPhone and Android: RTL/LTR, dark/light, long reading pages, answer input, audio, background timers, offline restart and interrupted exams. Responsive screenshots alone are not device certification.
+- Typecheck, functional and bilingual tests now pass. The web preview was opened and home, learning-library and contract-pathway navigation were checked. Complete the remaining end-to-end flows and physical iPhone/Android checks: RTL/LTR, dark/light, long reading pages, answer input, audio, background timers, offline restart and interrupted exams. Responsive screenshots alone are not device certification.
 - Interrupted in-progress tests are not yet persisted. Add versioned attempt drafts and resume/expiry behavior before claiming comprehensive progress tracking.
 
 ## Validation commands and current boundary
@@ -37,7 +37,7 @@ Work in progress: English and Persian only. Publication remains blocked until su
 - `npm run content:audit`: explicit curriculum gaps; counts do not establish legal correctness.
 - `npm run content:release-gate`: deliberately fails while editorial coverage/review requirements remain unmet. `npm run release:check` also enforces this gate.
 
-The local pure checks pass; full typecheck is blocked by missing installed dependencies. No browser, native build, physical-device certification, cloud migration deployment, or GitHub push is implied by this milestone.
+Dependency repair and typecheck were reverified on 20 September 2026; all 15 functional tests, the bilingual suite and the production web export pass. Browser smoke testing does not establish full functional coverage. Native builds, physical-device certification and cloud migration deployment remain outstanding. The editorial publication gate remains closed independently of software build success.
 
 ## Official reference
 

@@ -1,10 +1,17 @@
 node_modules/
 .expo/
+scripts/generate-content-translations.cjs
+src/legal-translations.generated.json
 .expo-shared/
 dist/
 web-build/
 .env
 .env.local
 .env.production
+app.json.before-eas.backup
 *.log
 .DS_Store
+
+# Local placeholders from restricted binary-asset preparation; app artwork is embedded in src/art-*.ts.
+/assets/subject-*.jpg
+/assets/subject-business.placeholder.txt

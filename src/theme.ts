@@ -1,10 +1,15 @@
 import { createContext, createElement, useContext, useMemo, type ReactNode } from 'react';
-import { useColorScheme } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
 
 import type { ThemeMode } from './store';
 
 export type AppPalette = {
   background: string;
+  sectionHome: string;
+  sectionLearn: string;
+  sectionReview: string;
+  sectionPractice: string;
+  sectionProfile: string;
   surface: string;
   surfaceMuted: string;
   ink: string;
@@ -36,23 +41,34 @@ export type AppPalette = {
   secondaryBorder: string;
   overlayBorder: string;
   overlaySurface: string;
+  imageScrim: string;
+  imageScrimStrong: string;
+  ambientPrimary: string;
+  ambientSecondary: string;
+  ambientWarm: string;
+  accentGlow: string;
   shadow: string;
 };
 
 export const lightPalette: AppPalette = {
-  background: '#F7F6FC',
-  surface: '#FFFFFF',
-  surfaceMuted: '#F0EEF9',
-  ink: '#19172B',
-  inkSoft: '#3E3A55',
-  muted: '#716D84',
-  line: '#E3E0EE',
-  primary: '#4B3DB8',
-  primaryAction: '#4B3DB8',
+  background: '#F4F5F9',
+  sectionHome: '#F4F5F9',
+  sectionLearn: '#F0EFF9',
+  sectionReview: '#ECF6F3',
+  sectionPractice: '#EDF3FA',
+  sectionProfile: '#F7F0EA',
+  surface: '#FFFEFC',
+  surfaceMuted: '#F0F2F8',
+  ink: '#171A2B',
+  inkSoft: '#3C415A',
+  muted: '#737A91',
+  line: '#E0E4ED',
+  primary: '#453FA4',
+  primaryAction: '#5148D2',
   onPrimaryAction: '#FFFFFF',
-  primaryDark: '#2F267A',
-  primarySoft: '#ECE9FF',
-  brandSurface: '#2F267A',
+  primaryDark: '#302A7A',
+  primarySoft: '#ECEBFB',
+  brandSurface: '#29245F',
   teal: '#087F78',
   tealSoft: '#DDF4F0',
   saffron: '#E2A11D',
@@ -68,46 +84,63 @@ export const lightPalette: AppPalette = {
   tealInk: '#195C57',
   borderGold: '#E9CC80',
   borderRose: '#F1C4D0',
-  pressBorder: '#CFC9ED',
-  secondaryBorder: '#D6D0FF',
+  pressBorder: '#C9C8E9',
+  secondaryBorder: '#D3D0F3',
   overlayBorder: 'rgba(255,255,255,0.18)',
   overlaySurface: 'rgba(255,255,255,0.08)',
-  shadow: '#2F267A',
+  imageScrim: 'rgba(255,255,255,0.08)',
+  imageScrimStrong: 'rgba(8,12,28,0.70)',
+  ambientPrimary: 'rgba(81,72,210,0.045)',
+  ambientSecondary: 'rgba(8,127,120,0.04)',
+  ambientWarm: 'rgba(226,161,29,0.035)',
+  accentGlow: 'rgba(81,72,210,0.14)',
+  shadow: '#25215A',
 };
 
 export const darkPalette: AppPalette = {
   background: '#0B1020',
-  surface: '#131A2C',
-  surfaceMuted: '#1B2438',
-  ink: '#F7F5FF',
-  inkSoft: '#D9D5E8',
-  muted: '#AAA5BA',
-  line: '#33405A',
-  primary: '#A99DFF',
-  primaryAction: '#6656D9',
+  sectionHome: '#0B1020',
+  sectionLearn: '#17112D',
+  sectionReview: '#082224',
+  sectionPractice: '#091B33',
+  sectionProfile: '#24151F',
+  surface: '#121A2D',
+  surfaceMuted: '#19243A',
+  ink: '#F6F7FF',
+  inkSoft: '#D8DEF4',
+  muted: '#A6B0CC',
+  line: '#293653',
+  primary: '#B7A8FF',
+  primaryAction: '#7058F5',
   onPrimaryAction: '#FFFFFF',
-  primaryDark: '#CEC8FF',
-  primarySoft: '#29264B',
-  brandSurface: '#211C4D',
-  teal: '#69DDD1',
-  tealSoft: '#153B3B',
-  saffron: '#F3C660',
-  saffronSoft: '#493A1D',
-  rose: '#FF91A8',
-  roseSoft: '#4B2432',
-  success: '#59D5B1',
+  primaryDark: '#E0DAFF',
+  primarySoft: '#29264F',
+  brandSurface: '#211C4A',
+  teal: '#52E4D1',
+  tealSoft: '#123B3B',
+  saffron: '#FFD166',
+  saffronSoft: '#48371B',
+  rose: '#FF83A6',
+  roseSoft: '#492033',
+  success: '#4ADDB2',
   white: '#FFFFFF',
-  black: '#070A12',
-  onPrimaryMuted: '#D8D2FF',
-  goldInk: '#FFE39A',
-  goldBody: '#F8D985',
-  tealInk: '#B9F8F0',
-  borderGold: '#755E27',
-  borderRose: '#77384A',
-  pressBorder: '#7369A7',
-  secondaryBorder: '#5B5292',
-  overlayBorder: 'rgba(255,255,255,0.22)',
-  overlaySurface: 'rgba(255,255,255,0.10)',
+  black: '#040610',
+  onPrimaryMuted: '#DED9FF',
+  goldInk: '#FFE7A3',
+  goldBody: '#EBCF80',
+  tealInk: '#B4FAF0',
+  borderGold: '#765D2D',
+  borderRose: '#74344D',
+  pressBorder: '#8172C5',
+  secondaryBorder: '#574AA0',
+  overlayBorder: 'rgba(255,255,255,0.15)',
+  overlaySurface: 'rgba(255,255,255,0.075)',
+  imageScrim: 'rgba(3,5,14,0.12)',
+  imageScrimStrong: 'rgba(3,5,14,0.68)',
+  ambientPrimary: 'rgba(112,88,245,0.18)',
+  ambientSecondary: 'rgba(82,228,209,0.10)',
+  ambientWarm: 'rgba(255,209,102,0.07)',
+  accentGlow: 'rgba(112,88,245,0.34)',
   shadow: '#000000',
 };
 
@@ -182,12 +215,24 @@ export const type = {
   latinBold: 'Manrope_700Bold',
 };
 
-export const createShadow = (colors: AppPalette) => ({
-  shadowColor: colors.shadow,
-  shadowOffset: { width: 0, height: 12 },
-  shadowOpacity: colors === darkPalette ? 0.28 : 0.09,
-  shadowRadius: 24,
-  elevation: 5,
-});
+export const createShadow = (colors: AppPalette) => Platform.OS === 'web'
+  ? { boxShadow: colors === darkPalette ? '0 14px 34px rgba(0,0,0,0.34), 0 1px 0 rgba(255,255,255,0.035)' : '0 12px 24px rgba(47,38,122,0.09)' }
+  : {
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 14 },
+      shadowOpacity: colors === darkPalette ? 0.34 : 0.09,
+      shadowRadius: colors === darkPalette ? 28 : 24,
+      elevation: colors === darkPalette ? 7 : 5,
+    };
+
+export const createAccentGlow = (colors: AppPalette) => Platform.OS === 'web'
+  ? { boxShadow: `0 10px 28px ${colors.accentGlow}` }
+  : {
+      shadowColor: colors.primaryAction,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: colors === darkPalette ? 0.34 : 0.14,
+      shadowRadius: 18,
+      elevation: colors === darkPalette ? 6 : 3,
+    };
 
 export const shadow = createShadow(lightPalette);

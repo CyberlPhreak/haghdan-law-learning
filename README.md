@@ -6,15 +6,29 @@ A Persian-first, offline-capable learning and practice app for the law of Englan
 
 - 14 SQE1 subject pathways across FLK1 and FLK2
 - All six SQE2 assessed legal skills
-- 103 structured learning units plus 15 everyday-law lessons
+- 137 structured SQE learning units and original timed-practice simulations plus 15 everyday-law lessons
 - Five-part SQE lessons: overview, core knowledge, application method, guided scenario and exam clinic
 - Bilingual English/Persian legal terminology, examples and checklists
 - Six knowledge checks inside each FLK lesson and four rubric checks inside each SQE2 lesson
-- 948 unit-specific five-option practice checks across FLK1 and FLK2: 474 black-letter-law checks and 474 application, method and ethics checks
+- 1,068 unit-specific five-option practice checks across 89 FLK1 and FLK2 learning units
 - Quick 10-question, diagnostic 30-question and timed 90-question sessions
+- Full 180-question FLK mock split into two independent 90-question, 153-minute sessions
+- Annex 4 blueprint-balanced mock selection, with Solicitors Accounts integrated into Property and Wills contexts
+- 24 original timed SQE2 practice simulations across all official skills and valid practice-area combinations; the live SQE2 assessment itself contains 16 assessments (4 oral and 12 written)
 - Subject-specific 20-question practice from every FLK pathway
 - Persistent results, bookmarks, streaks, daily goals and spaced review
-- Offline-first local storage with no account, advertising or analytics SDK
+- Persistent XP and seven learning levels, three daily missions, eight achievement badges, answer chains and finite reward celebrations
+- Persistent interface and curriculum choice for Persian, English, Simplified Chinese, Arabic and Spanish, with automatic RTL/LTR layout
+- 2,103 offline-translated lesson, SQE2 station, review and mock-question strings per additional language; official English terminology is retained and draft translations require qualified legal editorial review before publication
+- Learning-intelligence dashboard with readiness, seven-day activity, subject mastery, strengths and focus priorities
+- Original justice-themed subject artwork across FLK1, FLK2, SQE2 and everyday-law pathways
+- Floating illustrated mobile navigation with clear active states and persistent labels
+- Layered tap, correct-answer, retry and lesson/test milestone sound feedback with optional mute
+- Verified email/password and Google sign-in backed by Supabase Auth, with password reset, owner-only cloud data, automatic progress sync and in-app deletion
+- Explicit offline fallback account with a locally hashed PIN when cloud configuration is absent
+- Curriculum-grounded AI Study Assistant with five-language prompts, local fallback and non-persistent in-app chat
+- Server-side online AI proxy with moderation, rate limiting, strict production origin configuration, `store: false` and pseudonymous safety identifiers
+- In-app Support Centre, privacy policy, terms, educational disclaimer, copyright and trade-mark notice
 
 ## Stable Expo baseline
 
@@ -40,10 +54,48 @@ Web:
 npm run web
 ```
 
+## AI Study Assistant
+
+The app is fully usable without an API key. If `EXPO_PUBLIC_AI_CHAT_ENDPOINT` is absent or an online request is unavailable, the assistant searches the installed curriculum locally and labels the answer as offline.
+
+For higher-quality hosted answers, deploy the included proxy and keep the OpenAI key on that server:
+
+```powershell
+cp .env.example .env
+# Set OPENAI_API_KEY and a strict ALLOWED_ORIGINS value on the server.
+npm run ai:server
+```
+
+Then set `EXPO_PUBLIC_AI_CHAT_ENDPOINT` in the app build environment to the public HTTPS origin of the proxy. Never put `OPENAI_API_KEY` in an `EXPO_PUBLIC_` variable or in a mobile/web bundle.
+
+The proxy defaults to `gpt-5.6-terra`, can be changed with `OPENAI_MODEL`, binds to `127.0.0.1` by default, moderates the latest prompt, sends only recent chat and up to three relevant curriculum excerpts, disables Responses API state storage, and avoids logging request bodies. Set `HOST=0.0.0.0` only inside an appropriately protected production host or container. Production hosting must also be configured not to log bodies.
+
+## Accounts, database and email
+
+The production account system uses Supabase Auth and Postgres. The app bundles only a project URL and publishable key; database Row Level Security limits every profile, settings and progress row to its authenticated owner. Never place `SUPABASE_SERVICE_ROLE_KEY` in an Expo environment variable or client bundle.
+
+1. Create a Supabase project and install the Supabase CLI.
+2. Link the repository and apply the schema:
+
+   ```powershell
+   supabase link --project-ref YOUR_PROJECT_REF
+   supabase db push
+   supabase functions deploy delete-account
+   ```
+
+3. Copy `.env.example` to `.env` and set `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+4. In Supabase Auth, keep email confirmation enabled and add the production web URL plus `haghdan://**` to the redirect allow list.
+5. Enable the Google provider and add the OAuth client ID and secret created for the Supabase callback URL shown in the provider settings.
+6. Configure a publisher-controlled SMTP provider and branded verification/reset templates before production. Supabase's default email sender is intended only for limited testing.
+7. Test signup, verification, Google login, password recovery, cross-device sync, sign-out and account deletion in a signed development build.
+
+Google OAuth and email recovery use the `haghdan` custom URL scheme. Expo Go cannot fully validate that native redirect flow; use `npx expo run:ios`, `npx expo run:android`, or an EAS development build. When Supabase variables are absent, the app remains usable with its offline local-PIN account, but there is no email recovery or cross-device sync.
+
 ## Validate
 
 ```powershell
 npm run typecheck
+npm test
 npm run release:check
 npm run export:web
 npx expo-doctor
@@ -51,15 +103,27 @@ npx expo-doctor
 
 ## Publication preparation
 
-App icons, splash assets, native identifiers, EAS profiles, privacy policy, terms, editorial policy and draft store listings are included. Follow [PUBLISHING.md](./PUBLISHING.md).
+App icons, splash assets, native identifiers, EAS profiles, privacy policy, terms, editorial policy, support forms, rights notice, store listings and Apple/Google submission worksheets are included. Follow [PUBLISHING.md](./PUBLISHING.md).
 
-The remaining release blockers require the publisher rather than code:
+The SRA scope, assessment-format and transition audit is recorded in [docs/SRA_COVERAGE_AUDIT.md](./docs/SRA_COVERAGE_AUDIT.md).
 
-- replace publisher/contact placeholders;
-- host privacy/support pages;
-- complete Apple and Google account setup;
+Public product documents:
+
+- [Support](./SUPPORT.md)
+- [Privacy Policy](./docs/PRIVACY_POLICY.md)
+- [Terms and Educational Disclaimer](./docs/TERMS_AND_DISCLAIMER.md)
+- [Copyright and Trade Mark Notice](./COPYRIGHT.md)
+
+The remaining release controls require the publisher rather than code:
+
+- provide the verified seller/legal identity and monitored private contact route;
+- create the production Supabase project, apply migrations, deploy the deletion function, configure custom SMTP and complete Google OAuth credentials;
+- deploy the HTTPS AI proxy and set the production endpoint/origin allowlist, or ship offline-only;
+- merge the release so public support/privacy URLs resolve from `main`;
+- complete Apple, Google and Expo account setup;
 - obtain item-by-item legal editorial sign-off;
-- test signed builds on physical devices.
+- complete current privacy/data-safety/generative-AI questionnaires;
+- test production-signed builds on physical iPhone, iPad and Android devices.
 
 ## Content boundary
 
